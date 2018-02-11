@@ -2,7 +2,7 @@
 '''  
 #====#====#====#====
 # Project Name:     U-net 
-# File Name:        kugfsfukJSDBFS 
+# File Name:        data_Keras
 # Date:             2/9/18 4:44 PM 
 # Using IDE:        PyCharm Community Edition  
 # From HomePage:    https://github.com/DuFanXin/U-net
@@ -236,8 +236,8 @@ class DataProcess(object):
 			image = cv2.resize(src=image, dsize=(self.out_rows, self.out_cols))
 			my_set_image[index] = np.reshape(a=image[:, :, 0], newshape=(self.out_rows, self.out_cols, 1))
 			my_set_label[index] = np.reshape(a=image[:, :, 2], newshape=(self.out_rows, self.out_cols, 1))
-		# cv2.imshow('r', my_set_label[0])
-		# cv2.waitKey(0)
+		cv2.imshow('r', my_set_label[0])
+		cv2.waitKey(0)
 		np.save('../data_set/npydata/my_set_image.npy', my_set_image)
 		np.save('../data_set/npydata/my_set_label.npy', my_set_label)
 		print('Saving to .npy files done.')

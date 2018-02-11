@@ -15,7 +15,7 @@
 import tensorflow as tf
 import argparse
 import os
-from Unet.data import DataProcess
+# from Unet.data_Keras import DataProcess
 # import keras
 TRAIN_SET_NAME = 'train_set_small.tfrecords'
 DEVELOPMENT_SET_NAME = 'development_set_small.tfrecords'
@@ -242,8 +242,8 @@ class Unet:
 
 	def init_w(self, shape, name):
 		with tf.name_scope('init_w'):
-			# stddev = tf.sqrt(x=2 / (shape[0] * shape[1] * shape[2]))
-			stddev = 0.01
+			stddev = tf.sqrt(x=2 / (shape[0] * shape[1] * shape[2]))
+			# stddev = 0.01
 			w = tf.Variable(initial_value=tf.truncated_normal(shape=shape, stddev=stddev, dtype=tf.float32), name=name)
 			tf.add_to_collection(name='loss', value=tf.contrib.layers.l2_regularizer(self.lamb)(w))
 			return w
@@ -281,28 +281,28 @@ class Unet:
 		with tf.name_scope('input'):
 			# learning_rate = tf.train.exponential_decay()
 			self.input_image = tf.placeholder(
-				dtype=tf.float32, shape=[INPUT_IMG_WIDE, INPUT_IMG_WIDE], name='input_images'
+				dtype=tf.float32, shape=[batch_size, INPUT_IMG_WIDE, INPUT_IMG_WIDE, INPUT_IMG_CHANNEL], name='input_images'
 			)
-			self.cast_image = tf.reshape(
-				tensor=self.input_image,
-				shape=[batch_size, INPUT_IMG_WIDE, INPUT_IMG_WIDE, INPUT_IMG_CHANNEL]
-			)
+			# self.cast_image = tf.reshape(
+			# 	tensor=self.input_image,
+			# 	shape=[batch_size, INPUT_IMG_WIDE, INPUT_IMG_WIDE, INPUT_IMG_CHANNEL]
+			# )
 
 			# for softmax_cross_entropy_with_logits(labels=self.input_label, logits=self.prediction, name='loss')
 			# using one-hot
-			self.input_label = tf.placeholder(
-				dtype=tf.uint8, shape=[OUTPUT_IMG_WIDE, OUTPUT_IMG_WIDE], name='input_labels'
-			)
-			self.cast_label = tf.reshape(
-				tensor=tf.cast(x=tf.one_hot(indices=self.input_label, depth=CLASS_NUM), dtype=tf.float32),
-				shape=[batch_size, OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT, CLASS_NUM]
-			)
+			# self.input_label = tf.placeholder(
+			# 	dtype=tf.uint8, shape=[OUTPUT_IMG_WIDE, OUTPUT_IMG_WIDE], name='input_labels'
+			# )
+			# self.cast_label = tf.reshape(
+			# 	tensor=self.input_label,
+			# 	shape=[batch_size, OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT]
+			# )
 
 			# for sparse_softmax_cross_entropy_with_logits(labels=self.input_label, logits=self.prediction, name='loss')
 			# not using one-hot coding
-			# self.input_label = tf.placeholder(
-			# 	dtype=tf.int32, shape=[batch_size, OUTPUT_IMG_WIDE, OUTPUT_IMG_WIDE], name='input_labels'
-			# )
+			self.input_label = tf.placeholder(
+				dtype=tf.int32, shape=[batch_size, OUTPUT_IMG_WIDE, OUTPUT_IMG_WIDE], name='input_labels'
+			)
 			self.keep_prob = tf.placeholder(dtype=tf.float32, name='keep_prob')
 			self.lamb = tf.placeholder(dtype=tf.float32, name='lambda')
 
@@ -312,7 +312,7 @@ class Unet:
 			self.w[1] = self.init_w(shape=[3, 3, INPUT_IMG_CHANNEL, 64], name='w_1')
 			self.b[1] = self.init_b(shape=[64], name='b_1')
 			result_conv_1 = tf.nn.conv2d(
-				input=self.cast_image, filter=self.w[1],
+				input=self.input_image, filter=self.w[1],
 				strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
 			result_relu_1 = tf.nn.relu(tf.nn.bias_add(result_conv_1, self.b[1], name='add_bias'), name='relu_1')
 
@@ -585,12 +585,12 @@ class Unet:
 		# softmax loss
 		with tf.name_scope('softmax_loss'):
 			# using one-hot
-			self.loss = \
-				tf.nn.softmax_cross_entropy_with_logits(labels=self.cast_label, logits=self.prediction, name='loss')
+			# self.loss = \
+			# 	tf.nn.softmax_cross_entropy_with_logits(labels=self.cast_label, logits=self.prediction, name='loss')
 
 			# not using one-hot
-			# self.loss = \
-			# 	tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.input_label, logits=self.prediction, name='loss')
+			self.loss = \
+				tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.input_label, logits=self.prediction, name='loss')
 			self.loss_mean = tf.reduce_mean(self.loss)
 			tf.add_to_collection(name='loss', value=self.loss_mean)
 			self.loss_all = tf.add_n(inputs=tf.get_collection(key='loss'))
@@ -598,11 +598,11 @@ class Unet:
 		# accuracy
 		with tf.name_scope('accuracy'):
 			# using one-hot
-			self.correct_prediction = tf.equal(tf.argmax(self.prediction, axis=3), tf.argmax(self.cast_label, axis=3))
+			# self.correct_prediction = tf.equal(tf.argmax(self.prediction, axis=3), tf.argmax(self.cast_label, axis=3))
 
 			# not using one-hot
-			# self.correct_prediction = \
-			# 	tf.equal(tf.argmax(input=self.prediction, axis=3, output_type=tf.int32), self.input_label)
+			self.correct_prediction = \
+				tf.equal(tf.argmax(input=self.prediction, axis=3, output_type=tf.int32), self.input_label)
 			self.correct_prediction = tf.cast(self.correct_prediction, tf.float32)
 			self.accuracy = tf.reduce_mean(self.correct_prediction)
 
@@ -612,6 +612,7 @@ class Unet:
 
 	def train(self):
 		import cv2
+		import numpy as np
 		ckpt_path = os.path.join(FLAGS.model_dir, "model.ckpt")
 		all_parameters_saver = tf.train.Saver()
 		# import numpy as np
@@ -622,13 +623,15 @@ class Unet:
 		my_set_image.astype('float32')
 		my_set_label[my_set_label <= 128] = 0
 		my_set_label[my_set_label > 128] = 1
+		my_set_image = np.reshape(a=my_set_image, newshape=(1, INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL))
+		my_set_label = np.reshape(a=my_set_label, newshape=(1, OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT))
 		# cv2.imshow('image', my_set_image)
 		# cv2.imshow('label', my_set_label * 100)
 		# cv2.waitKey(0)
 		with tf.Session() as sess:  # 开始一个会话
 			sess.run(tf.global_variables_initializer())
 			sess.run(tf.local_variables_initializer())
-			for epoch in range(300):
+			for epoch in range(10):
 				lo, acc = sess.run(
 					[self.loss_mean, self.accuracy],
 					feed_dict={
@@ -669,19 +672,20 @@ class Unet:
 						self.keep_prob: 1.0, self.lamb: 0.004}
 			)
 		image = np.argmax(a=image[0], axis=2).astype('uint8') * 255
-		cv2.imshow('predict', image)
+		# cv2.imshow('predict', image)
 		# cv2.imshow('o', np.asarray(a=image[0], dtype=np.uint8) * 100)
-		cv2.waitKey(0)
+		# cv2.waitKey(0)
+		cv2.imwrite(filename=os.path.join(FLAGS.model_dir, 'predict.jpg'), img=image)
 		print(acc)
-		print("Done test")
+		print("Done test, predict image has been saved to %s" % (os.path.join(FLAGS.model_dir, 'predict.jpg')))
 
 
 def main():
 	net = Unet()
-	# net.set_up_unet(TRAIN_BATCH_SIZE)
-	# net.train()
-	net.set_up_unet(DEVELOPMENT_BATCH_SIZE)
-	net.validate()
+	net.set_up_unet(TRAIN_BATCH_SIZE)
+	net.train()
+	# net.set_up_unet(DEVELOPMENT_BATCH_SIZE)
+	# net.validate()
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
@@ -695,7 +699,7 @@ if __name__ == '__main__':
 		'--model_dir', type=str, default='..//data_set/saved_models',
 		help='output model path')
 
-	# 模型保存地址
+	# 日志保存地址
 	parser.add_argument(
 		'--tb_dir', type=str, default='../output-data/log',
 		help='TensorBoard log path')

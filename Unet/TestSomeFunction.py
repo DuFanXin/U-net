@@ -49,6 +49,16 @@ def load_small_train_data():
 	cv2.waitKey(0)
 
 
+def check_npy():
+	imgs_test = np.load('../data_set/npydata/my_set_image.npy')
+	# imgs_test = imgs_test.astype('uint8')
+	print(imgs_test[0].shape)
+	# img1 = None
+	img1 = np.argmax(a=imgs_test[1], axis=-1).astype('uint8')
+	# print(img1.shape)
+	cv2.imshow('r', img1 * 100)
+	cv2.waitKey(0)
+
 def create_small_train_data():
 	out_rows = 512
 	out_cols = 512
