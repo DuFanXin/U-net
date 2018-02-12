@@ -17,6 +17,9 @@ import numpy as np
 import os
 import glob
 import cv2
+from data_TF import TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME, PREDICT_SET_NAME, \
+	TRAIN_SET_SIZE, VALIDATION_SET_SIZE, TEST_SET_SIZE, PREDICT_SET_SIZE, \
+	ORIGIN_IMAGE_DIRECTORY, ORIGIN_LABEL_DIRECTORY, ORIGIN_PREDICT_DIRECTORY
 
 
 class Augmentation(object):
@@ -81,7 +84,7 @@ class Augmentation(object):
 				os.mkdir(savedir)
 			self.do_augmentate(img, savedir, str(i))                      # 数据增强
 
-	def do_augmentate(self, img, save_to_dir, save_prefix, batch_size=1, save_format='tif', imgnum=30):
+	def do_augmentate(self, img, save_to_dir, save_prefix, batch_size=1, save_format='tif', imgnum=70):
 		print("运行 doAugmenttaion")
 
 		# augmentate one image
@@ -310,12 +313,138 @@ class DataProcess(object):
 		cv2.imshow('r', img1 * 100)
 		cv2.waitKey(0)
 
+	def write_img_to_tfrecords(self):
+		import tensorflow as tf
+		from random import shuffle
+		import cv2
+		train_set_writer = tf.python_io.TFRecordWriter(os.path.join('../data_set/my_set', TRAIN_SET_NAME))  # 要生成的文件
+		validation_set_writer = tf.python_io.TFRecordWriter(os.path.join('../data_set/my_set', VALIDATION_SET_NAME))
+		test_set_writer = tf.python_io.TFRecordWriter(os.path.join('../data_set/my_set', TEST_SET_NAME))  # 要生成的文件
+		# predict_set_writer = tf.python_io.TFRecordWriter(os.path.join('../data_set/my_set', PREDICT_SET_NAME))  # 要生成的文件
+
+		merged_images_path = []
+		for indir in os.listdir(self.aug_merge_path):
+			# trainPath = os.path.join(self.aug_train_path, indir)
+			# labelPath = os.path.join(self.aug_label_path, indir)
+			# print(trainPath, labelPath)
+			imgs = glob.glob(os.path.join(self.aug_merge_path, indir) + '/*' + '.tif')
+			# print(imgs[0])
+			merged_images_path.extend(glob.glob(os.path.join(self.aug_merge_path, indir) + '/*' + '.tif'))
+		print('Total %d files' % len(merged_images_path))
+		# merged_images_path = merged_images_path[:merged_images_path.rindex('.tif'):1]
+		shuffle(merged_images_path)
+
+		# train set
+		for index, merged_image_path in enumerate(merged_images_path[:TRAIN_SET_SIZE]):
+			train_image_path = merged_image_path.replace('merge', 'train')
+			train_image_path = train_image_path[:train_image_path.rindex('.tif')] + '_train.tif'
+			label_image_path = merged_image_path.replace('merge', 'label')
+			label_image_path = label_image_path[:label_image_path.rindex('.tif')] + '_label.tif'
+			# print(train_image_path, label_image_path)
+			image = cv2.imread(train_image_path, flags=0)
+			label = cv2.imread(label_image_path, flags=0)
+			# print(image.shape)
+			label[label <= 100] = 0
+			label[label > 100] = 1
+			example = tf.train.Example(features=tf.train.Features(feature={
+				'label': tf.train.Feature(bytes_list=tf.train.BytesList(value=[label.tobytes()])),
+				'image_raw': tf.train.Feature(bytes_list=tf.train.BytesList(value=[image.tobytes()]))
+			}))  # example对象对label和image数据进行封装
+			train_set_writer.write(example.SerializeToString())  # 序列化为字符串
+			if index % 100 == 0:
+				print('Done train_set writing %.2f%%' % (index / TRAIN_SET_SIZE * 100))
+		train_set_writer.close()
+		print("Done whole train_set writing")
+
+		# validation set
+		for index, merged_image_path in enumerate(merged_images_path[TRAIN_SET_SIZE:]):
+			validation_image_path = merged_image_path.replace('merge', 'train')
+			validation_image_path = validation_image_path[:validation_image_path.rindex('.tif')] + '_train.tif'
+			label_image_path = merged_image_path.replace('merge', 'label')
+			label_image_path = label_image_path[:label_image_path.rindex('.tif')] + '_label.tif'
+			# print(train_image_path, label_image_path)
+			image = cv2.imread(validation_image_path, flags=0)
+			label = cv2.imread(label_image_path, flags=0)
+			# print(image.shape)
+			label[label <= 100] = 0
+			label[label > 100] = 1
+			example = tf.train.Example(features=tf.train.Features(feature={
+				'label': tf.train.Feature(bytes_list=tf.train.BytesList(value=[label.tobytes()])),
+				'image_raw': tf.train.Feature(bytes_list=tf.train.BytesList(value=[image.tobytes()]))
+			}))  # example对象对label和image数据进行封装
+			validation_set_writer.write(example.SerializeToString())  # 序列化为字符串
+			if index % 10 == 0:
+				print('Done validation_set writing %.2f%%' % (index / VALIDATION_SET_SIZE * 100))
+		validation_set_writer.close()
+		print("Done whole validation_set writing")
+
+		# test set
+		for index in range(PREDICT_SET_SIZE):
+			origin_image_path = ORIGIN_IMAGE_DIRECTORY
+			origin_label_path = ORIGIN_LABEL_DIRECTORY
+			predict_image = cv2.imread(os.path.join(origin_image_path, '%d.tif' % index), flags=0)
+			predict_label = cv2.imread(os.path.join(origin_label_path, '%d.tif' % index), flags=0)
+			# predict_image = cv2.resize(src=predict_image, dsize=(INPUT_IMG_WIDE, INPUT_IMG_HEIGHT))
+			# predict_image = np.asarray(a=predict_image, dtype=np.uint8)
+			# predict_image = cv2.resize(src=predict_image, dsize=(INPUT_IMG_WIDE, INPUT_IMG_HEIGHT))
+			# predict_label = np.asarray(a=predict_label, dtype=np.uint8)
+			# predict_label = cv2.resize(src=predict_label, dsize=(OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT))
+			predict_label[predict_label <= 100] = 0
+			predict_label[predict_label > 100] = 1
+			# predict_image = io.imread(file_path)
+			# predict_image = transform.resize(predict_image, (INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL))
+			# sample_image = predict_image[:, :, 0]
+			# label_image = predict_image[:, :, 2]
+			# label_image[label_image < 100] = 0
+			# label_image[label_image > 100] = 10
+			example = tf.train.Example(features=tf.train.Features(feature={
+				'label': tf.train.Feature(bytes_list=tf.train.BytesList(value=[predict_label.tobytes()])),
+				'image_raw': tf.train.Feature(bytes_list=tf.train.BytesList(value=[predict_image.tobytes()]))
+			}))  # example对象对label和image数据进行封装
+			test_set_writer.write(example.SerializeToString())  # 序列化为字符串
+			if index % 10 == 0:
+				print('Done test_set writing %.2f%%' % (index / PREDICT_SET_SIZE * 100))
+		test_set_writer.close()
+		print("Done test_set writing")
+
+		# predict set
+		for index in range(PREDICT_SET_SIZE):
+			origin_image_path = ORIGIN_IMAGE_DIRECTORY
+			origin_label_path = ORIGIN_LABEL_DIRECTORY
+			predict_image = cv2.imread(os.path.join(origin_image_path, '%d.tif' % index), flags=0)
+			predict_label = cv2.imread(os.path.join(origin_label_path, '%d.tif' % index), flags=0)
+			# predict_image = cv2.resize(src=predict_image, dsize=(INPUT_IMG_WIDE, INPUT_IMG_HEIGHT))
+			# predict_image = np.asarray(a=predict_image, dtype=np.uint8)
+			# predict_image = cv2.resize(src=predict_image, dsize=(INPUT_IMG_WIDE, INPUT_IMG_HEIGHT))
+			# predict_label = np.asarray(a=predict_label, dtype=np.uint8)
+			# predict_label = cv2.resize(src=predict_label, dsize=(OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT))
+			predict_label[predict_label <= 100] = 0
+			predict_label[predict_label > 100] = 1
+			# predict_image = io.imread(file_path)
+			# predict_image = transform.resize(predict_image, (INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL))
+			# sample_image = predict_image[:, :, 0]
+			# label_image = predict_image[:, :, 2]
+			# label_image[label_image < 100] = 0
+			# label_image[label_image > 100] = 10
+			example = tf.train.Example(features=tf.train.Features(feature={
+				'label': tf.train.Feature(bytes_list=tf.train.BytesList(value=[predict_label.tobytes()])),
+				'image_raw': tf.train.Feature(bytes_list=tf.train.BytesList(value=[predict_image.tobytes()]))
+			}))  # example对象对label和image数据进行封装
+			# predict_set_writer.write(example.SerializeToString())  # 序列化为字符串
+			if index % 10 == 0:
+				print('Done predict_set writing %.2f%%' % (index / PREDICT_SET_SIZE * 100))
+		# predict_set_writer.close()
+		print("Done predict_set writing")
+
+
 if __name__ == '__main__':
 	# aug = Augmentation()
 	# aug.augmentation()
 	# aug.split_merge()
 	mydata = DataProcess(512, 512)
-	mydata.create_my_data()
+	# print(cv2.imread('../data_set/aug_label/13/13_0_285_label.tif').shape)
+	mydata.write_img_to_tfrecords()
+	# mydata.create_my_data()
 	# mydata.create_small_train_data()
 	# mydata.create_train_data()
 	# mydata.create_test_data()

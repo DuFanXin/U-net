@@ -59,6 +59,7 @@ def check_npy():
 	cv2.imshow('r', img1 * 100)
 	cv2.waitKey(0)
 
+
 def create_small_train_data():
 	out_rows = 512
 	out_cols = 512

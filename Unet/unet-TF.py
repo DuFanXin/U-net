@@ -15,19 +15,25 @@
 import tensorflow as tf
 import argparse
 import os
+from data_TF import TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME, PREDICT_SET_NAME, \
+	INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL, \
+	OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT, TEST_SET_SIZE, ORIGIN_PREDICT_DIRECTORY, PREDICT_SET_SIZE
 # from Unet.data_Keras import DataProcess
 # import keras
-TRAIN_SET_NAME = 'train_set_small.tfrecords'
-DEVELOPMENT_SET_NAME = 'development_set_small.tfrecords'
-INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL = 512, 512, 1
-OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT, OUTPUT_IMG_CHANNEL = 512, 512, 1
-EPOCH_NUM = 200
+# TRAIN_SET_NAME = 'train_set.tfrecords'
+# VALIDATION_SET_NAME = 'validation_set.tfrecords'
+# INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL = 512, 512, 1
+# OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT, OUTPUT_IMG_CHANNEL = 512, 512, 1
+EPOCH_NUM = 1
 TRAIN_BATCH_SIZE = 1
-DEVELOPMENT_BATCH_SIZE = 1
-TEST_BATCH_SIZE = 128
+VALIDATION_BATCH_SIZE = 1
+TEST_BATCH_SIZE = 1
+PREDICT_BATCH_SIZE = 1
+PREDICT_SAVED_DIRECTORY = '../data_set/my_set/predictions'
 EPS = 10e-5
 FLAGS = None
 CLASS_NUM = 2
+CHECK_POINT_PATH = '../data_set/saved_models/train_2nd/model.ckpt'
 
 
 def calculate_unet_input_and_output(bottom=0):
@@ -96,14 +102,14 @@ def write_img_to_tfrecords():
 	import glob
 	import numpy as np
 	train_set_size = 28
-	development_set_size = 2
+	validation_set_size = 2
 	path = glob.glob(os.path.join('/home/dufanxin/PycharmProjects/Image-Augmentor/inputdata/image', 'combine0.png'))
 	print(len(path))
 	train_set_writer = tf.python_io.TFRecordWriter(os.path.join(FLAGS.data_dir, TRAIN_SET_NAME))  # 要生成的文件
-	development_set_writer = tf.python_io.TFRecordWriter(os.path.join(FLAGS.data_dir, DEVELOPMENT_SET_NAME))
+	validation_set_writer = tf.python_io.TFRecordWriter(os.path.join(FLAGS.data_dir, VALIDATION_SET_NAME))
 	# test_set_writer = tf.python_io.TFRecordWriter(os.path.join(FLAGS.data_dir, 'test_set.tfrecords'))  # 要生成的文件
 	train_path = path[:10000]
-	development_path = path[10000:]
+	validation_path = path[10000:]
 	# print(len(path))
 
 	for index, file_path in enumerate(train_path):
@@ -131,39 +137,39 @@ def write_img_to_tfrecords():
 	train_set_writer.close()
 	print("Done train_set writing")
 
-	for index, file_path in enumerate(development_path):
-		development_image = cv2.imread(file_path)
-		# development_image = cv2.resize(src=development_image, dsize=(INPUT_IMG_WIDE, INPUT_IMG_HEIGHT))
-		sample_image = np.asarray(a=development_image[:, :, 0], dtype=np.uint8)
+	for index, file_path in enumerate(validation_path):
+		validation_image = cv2.imread(file_path)
+		# validation_image = cv2.resize(src=validation_image, dsize=(INPUT_IMG_WIDE, INPUT_IMG_HEIGHT))
+		sample_image = np.asarray(a=validation_image[:, :, 0], dtype=np.uint8)
 		sample_image = cv2.resize(src=sample_image, dsize=(INPUT_IMG_WIDE, INPUT_IMG_HEIGHT))
-		label_image = np.asarray(development_image[:, :, 2], dtype=np.uint8)
+		label_image = np.asarray(validation_image[:, :, 2], dtype=np.uint8)
 		label_image = cv2.resize(src=label_image, dsize=(OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT))
 		label_image[label_image <= 100] = 0
 		label_image[label_image > 100] = 10
-		# development_image = io.imread(file_path)
-		# development_image = transform.resize(development_image, (INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL))
-		# sample_image = development_image[:, :, 0]
-		# label_image = development_image[:, :, 2]
+		# validation_image = io.imread(file_path)
+		# validation_image = transform.resize(validation_image, (INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL))
+		# sample_image = validation_image[:, :, 0]
+		# label_image = validation_image[:, :, 2]
 		# label_image[label_image < 100] = 0
 		# label_image[label_image > 100] = 10
 		example = tf.train.Example(features=tf.train.Features(feature={
 			'label': tf.train.Feature(bytes_list=tf.train.BytesList(value=[label_image.tobytes()])),
 			'image_raw': tf.train.Feature(bytes_list=tf.train.BytesList(value=[sample_image.tobytes()]))
 		}))  # example对象对label和image数据进行封装
-		development_set_writer.write(example.SerializeToString())  # 序列化为字符串
+		validation_set_writer.write(example.SerializeToString())  # 序列化为字符串
 		if index % 100 == 0:
-			print('Done development_set writing %.2f%%' % (index / development_set_size * 100))
-	development_set_writer.close()
-	print("Done development_set writing")
+			print('Done validation_set writing %.2f%%' % (index / validation_set_size * 100))
+	validation_set_writer.close()
+	print("Done validation_set writing")
 
 
 def read_check_tfrecords():
 	import cv2
-	train_file_path = os.path.join('../input-data/Segmentation', 'train_set.tfrecords')
+	train_file_path = os.path.join(FLAGS.data_dir, TRAIN_SET_NAME)
 	train_image_filename_queue = tf.train.string_input_producer(
 		string_tensor=tf.train.match_filenames_once(train_file_path), num_epochs=1, shuffle=True)
 	train_images, train_labels = read_image(train_image_filename_queue)
-	one_hot_labels = tf.to_float(tf.one_hot(indices=train_labels, depth=CLASS_NUM))
+	# one_hot_labels = tf.to_float(tf.one_hot(indices=train_labels, depth=CLASS_NUM))
 	with tf.Session() as sess:  # 开始一个会话
 		sess.run(tf.global_variables_initializer())
 		sess.run(tf.local_variables_initializer())
@@ -215,30 +221,30 @@ def read_image_batch(file_queue, batch_size):
 	image_batch, label_batch = tf.train.shuffle_batch(
 		tensors=[img, label], batch_size=batch_size,
 		capacity=capacity, min_after_dequeue=min_after_dequeue)
-	one_hot_labels = tf.to_float(tf.one_hot(indices=label_batch, depth=CLASS_NUM))
-	# one_hot_labels = tf.reshape(label_batch, [batch_size, OUTPUT_IMG_HEIGHT, OUTPUT_IMG_WIDE])
+	# one_hot_labels = tf.to_float(tf.one_hot(indices=label_batch, depth=CLASS_NUM))
+	one_hot_labels = tf.reshape(label_batch, [batch_size, OUTPUT_IMG_HEIGHT, OUTPUT_IMG_WIDE])
 	return image_batch, one_hot_labels
 
 
 class Unet:
-	input_image = None
-	input_label = None
-	cast_image = None
-	cast_label = None
-	keep_prob = None
-	lamb = None
-	result_expand = None
-	loss, loss_mean, loss_all, train_step = [None] * 4
-	prediction, correct_prediction, accuracy = [None] * 3
-	result_conv = {}
-	result_relu = {}
-	result_maxpool = {}
-	result_from_contract_layer = {}
-	w = {}
-	b = {}
 
 	def __init__(self):
 		print('New U-net Network')
+		self.input_image = None
+		self.input_label = None
+		self.cast_image = None
+		self.cast_label = None
+		self.keep_prob = None
+		self.lamb = None
+		self.result_expand = None
+		self.loss, self.loss_mean, self.loss_all, self.train_step = [None] * 4
+		self.prediction, self.correct_prediction, self.accuracy = [None] * 3
+		self.result_conv = {}
+		self.result_relu = {}
+		self.result_maxpool = {}
+		self.result_from_contract_layer = {}
+		self.w = {}
+		self.b = {}
 
 	def init_w(self, shape, name):
 		with tf.name_scope('init_w'):
@@ -608,100 +614,272 @@ class Unet:
 
 		# Gradient Descent
 		with tf.name_scope('Gradient_Descent'):
-			self.train_step = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.loss_mean)
+			self.train_step = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.loss_all)
 
 	def train(self):
-		import cv2
-		import numpy as np
-		ckpt_path = os.path.join(FLAGS.model_dir, "model.ckpt")
-		all_parameters_saver = tf.train.Saver()
+		# import cv2
 		# import numpy as np
-		# mydata = DataProcess(INPUT_IMG_HEIGHT, INPUT_IMG_WIDE)
-		# imgs_train, imgs_mask_train = mydata.load_my_train_data()
-		my_set_image = cv2.imread('../data_set/train.tif', flags=0)
-		my_set_label = cv2.imread('../data_set/label.tif', flags=0)
-		my_set_image.astype('float32')
-		my_set_label[my_set_label <= 128] = 0
-		my_set_label[my_set_label > 128] = 1
-		my_set_image = np.reshape(a=my_set_image, newshape=(1, INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL))
-		my_set_label = np.reshape(a=my_set_label, newshape=(1, OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT))
-		# cv2.imshow('image', my_set_image)
-		# cv2.imshow('label', my_set_label * 100)
-		# cv2.waitKey(0)
+		# ckpt_path = os.path.join(FLAGS.model_dir, "model.ckpt")
+		# all_parameters_saver = tf.train.Saver()
+		# # import numpy as np
+		# # mydata = DataProcess(INPUT_IMG_HEIGHT, INPUT_IMG_WIDE)
+		# # imgs_train, imgs_mask_train = mydata.load_my_train_data()
+		# my_set_image = cv2.imread('../data_set/train.tif', flags=0)
+		# my_set_label = cv2.imread('../data_set/label.tif', flags=0)
+		# my_set_image.astype('float32')
+		# my_set_label[my_set_label <= 128] = 0
+		# my_set_label[my_set_label > 128] = 1
+		# my_set_image = np.reshape(a=my_set_image, newshape=(1, INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL))
+		# my_set_label = np.reshape(a=my_set_label, newshape=(1, OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT))
+		# # cv2.imshow('image', my_set_image)
+		# # cv2.imshow('label', my_set_label * 100)
+		# # cv2.waitKey(0)
+		# with tf.Session() as sess:  # 开始一个会话
+		# 	sess.run(tf.global_variables_initializer())
+		# 	sess.run(tf.local_variables_initializer())
+		# 	for epoch in range(10):
+		# 		lo, acc = sess.run(
+		# 			[self.loss_mean, self.accuracy],
+		# 			feed_dict={
+		# 				self.input_image: my_set_image, self.input_label: my_set_label,
+		# 				self.keep_prob: 1.0, self.lamb: 0.004}
+		# 		)
+		# 		# print('num %d, loss: %.6f and accuracy: %.6f' % (epoch, lo, acc))
+		# 		print('num %d, loss: %.6f and accuracy: %.6f' % (epoch, lo, acc))
+		# 		sess.run(
+		# 			[self.train_step],
+		# 			feed_dict={
+		# 				self.input_image: my_set_image, self.input_label: my_set_label,
+		# 				self.keep_prob: 0.6, self.lamb: 0.004}
+		# 		)
+		# 	all_parameters_saver.save(sess=sess, save_path=ckpt_path)
+		# print("Done training")
+		train_file_path = os.path.join(FLAGS.data_dir, TRAIN_SET_NAME)
+		train_image_filename_queue = tf.train.string_input_producer(
+			string_tensor=tf.train.match_filenames_once(train_file_path), num_epochs=EPOCH_NUM, shuffle=True)
+		ckpt_path = os.path.join(FLAGS.model_dir, "model.ckpt")
+		train_images, train_labels = read_image_batch(train_image_filename_queue, TRAIN_BATCH_SIZE)
+		tf.summary.scalar("loss", self.loss_mean)
+		tf.summary.scalar('accuracy', self.accuracy)
+		merged_summary = tf.summary.merge_all()
+		all_parameters_saver = tf.train.Saver()
 		with tf.Session() as sess:  # 开始一个会话
 			sess.run(tf.global_variables_initializer())
 			sess.run(tf.local_variables_initializer())
-			for epoch in range(10):
-				lo, acc = sess.run(
-					[self.loss_mean, self.accuracy],
-					feed_dict={
-						self.input_image: my_set_image, self.input_label: my_set_label,
-						self.keep_prob: 1.0, self.lamb: 0.004}
-				)
-				# print('num %d, loss: %.6f and accuracy: %.6f' % (epoch, lo, acc))
-				print('num %d, loss: %.6f and accuracy: %.6f' % (epoch, lo, acc))
-				sess.run(
-					[self.train_step],
-					feed_dict={
-						self.input_image: my_set_image, self.input_label: my_set_label,
-						self.keep_prob: 0.6, self.lamb: 0.004}
-				)
-			all_parameters_saver.save(sess=sess, save_path=ckpt_path)
+			summary_writer = tf.summary.FileWriter(FLAGS.tb_dir, sess.graph)
+			tf.summary.FileWriter(FLAGS.model_dir, sess.graph)
+			coord = tf.train.Coordinator()
+			threads = tf.train.start_queue_runners(coord=coord)
+			try:
+				epoch = 1
+				while not coord.should_stop():
+					# Run training steps or whatever
+					# print('epoch ' + str(epoch))
+					example, label = sess.run([train_images, train_labels])  # 在会话中取出image和label
+					# print(label)
+					lo, acc, summary_str = sess.run(
+						[self.loss_mean, self.accuracy, merged_summary],
+						feed_dict={
+							self.input_image: example, self.input_label: label, self.keep_prob: 1.0,
+							self.lamb: 0.004}
+					)
+					summary_writer.add_summary(summary_str, epoch)
+					# print('num %d, loss: %.6f and accuracy: %.6f' % (epoch, lo, acc))
+					if epoch % 10 == 0:
+						print('num %d, loss: %.6f and accuracy: %.6f' % (epoch, lo, acc))
+					sess.run(
+						[self.train_step],
+						feed_dict={
+							self.input_image: example, self.input_label: label, self.keep_prob: 0.6,
+							self.lamb: 0.004}
+					)
+					epoch += 1
+			except tf.errors.OutOfRangeError:
+				print('Done training -- epoch limit reached')
+			finally:
+				# When done, ask the threads to stop.
+				all_parameters_saver.save(sess=sess, save_path=ckpt_path)
+				coord.request_stop()
+			# coord.request_stop()
+			coord.join(threads)
 		print("Done training")
 
 	def validate(self):
-		import cv2
-		import numpy as np
-		ckpt_path = os.path.join(FLAGS.model_dir, "model.ckpt")
-		# mydata = DataProcess(INPUT_IMG_HEIGHT, INPUT_IMG_WIDE)
-		# imgs_train, imgs_mask_train = mydata.load_my_train_data()
+		# import cv2
+		# import numpy as np
+		# ckpt_path = os.path.join(FLAGS.model_dir, "model.ckpt")
+		# # mydata = DataProcess(INPUT_IMG_HEIGHT, INPUT_IMG_WIDE)
+		# # imgs_train, imgs_mask_train = mydata.load_my_train_data()
+		# all_parameters_saver = tf.train.Saver()
+		# my_set_image = cv2.imread('../data_set/train.tif', flags=0)
+		# my_set_label = cv2.imread('../data_set/label.tif', flags=0)
+		# my_set_image.astype('float32')
+		# my_set_label[my_set_label <= 128] = 0
+		# my_set_label[my_set_label > 128] = 1
+		# with tf.Session() as sess:
+		# 	sess.run(tf.global_variables_initializer())
+		# 	sess.run(tf.local_variables_initializer())
+		# 	all_parameters_saver.restore(sess=sess, save_path=ckpt_path)
+		# 	image, acc = sess.run(
+		# 		fetches=[self.prediction, self.accuracy],
+		# 		feed_dict={
+		# 				self.input_image: my_set_image, self.input_label: my_set_label,
+		# 				self.keep_prob: 1.0, self.lamb: 0.004}
+		# 	)
+		# image = np.argmax(a=image[0], axis=2).astype('uint8') * 255
+		# # cv2.imshow('predict', image)
+		# # cv2.imshow('o', np.asarray(a=image[0], dtype=np.uint8) * 100)
+		# # cv2.waitKey(0)
+		# cv2.imwrite(filename=os.path.join(FLAGS.model_dir, 'predict.jpg'), img=image)
+		# print(acc)
+		# print("Done test, predict image has been saved to %s" % (os.path.join(FLAGS.model_dir, 'predict.jpg')))
+		validation_file_path = os.path.join(FLAGS.data_dir, VALIDATION_SET_NAME)
+		validation_image_filename_queue = tf.train.string_input_producer(
+			string_tensor=tf.train.match_filenames_once(validation_file_path), num_epochs=1, shuffle=True)
+		ckpt_path = CHECK_POINT_PATH
+		validation_images, validation_labels = read_image_batch(validation_image_filename_queue, VALIDATION_BATCH_SIZE)
+		# tf.summary.scalar("loss", self.loss_mean)
+		# tf.summary.scalar('accuracy', self.accuracy)
+		# merged_summary = tf.summary.merge_all()
 		all_parameters_saver = tf.train.Saver()
-		my_set_image = cv2.imread('../data_set/train.tif', flags=0)
-		my_set_label = cv2.imread('../data_set/label.tif', flags=0)
-		my_set_image.astype('float32')
-		my_set_label[my_set_label <= 128] = 0
-		my_set_label[my_set_label > 128] = 1
-		with tf.Session() as sess:
+		with tf.Session() as sess:  # 开始一个会话
 			sess.run(tf.global_variables_initializer())
 			sess.run(tf.local_variables_initializer())
+			# summary_writer = tf.summary.FileWriter(FLAGS.tb_dir, sess.graph)
+			# tf.summary.FileWriter(FLAGS.model_dir, sess.graph)
 			all_parameters_saver.restore(sess=sess, save_path=ckpt_path)
-			image, acc = sess.run(
-				fetches=[self.prediction, self.accuracy],
-				feed_dict={
-						self.input_image: my_set_image, self.input_label: my_set_label,
-						self.keep_prob: 1.0, self.lamb: 0.004}
-			)
-		image = np.argmax(a=image[0], axis=2).astype('uint8') * 255
-		# cv2.imshow('predict', image)
-		# cv2.imshow('o', np.asarray(a=image[0], dtype=np.uint8) * 100)
-		# cv2.waitKey(0)
-		cv2.imwrite(filename=os.path.join(FLAGS.model_dir, 'predict.jpg'), img=image)
-		print(acc)
-		print("Done test, predict image has been saved to %s" % (os.path.join(FLAGS.model_dir, 'predict.jpg')))
+			coord = tf.train.Coordinator()
+			threads = tf.train.start_queue_runners(coord=coord)
+			try:
+				epoch = 1
+				while not coord.should_stop():
+					# Run training steps or whatever
+					# print('epoch ' + str(epoch))
+					example, label = sess.run([validation_images, validation_labels])  # 在会话中取出image和label
+					# print(label)
+					lo, acc = sess.run(
+						[self.loss_mean, self.accuracy],
+						feed_dict={
+							self.input_image: example, self.input_label: label, self.keep_prob: 1.0,
+							self.lamb: 0.004}
+					)
+					# summary_writer.add_summary(summary_str, epoch)
+					# print('num %d, loss: %.6f and accuracy: %.6f' % (epoch, lo, acc))
+					if epoch % 1 == 0:
+						print('num %d, loss: %.6f and accuracy: %.6f' % (epoch, lo, acc))
+					epoch += 1
+			except tf.errors.OutOfRangeError:
+				print('Done validating -- epoch limit reached')
+			finally:
+				# When done, ask the threads to stop.
+				coord.request_stop()
+			# coord.request_stop()
+			coord.join(threads)
+		print('Done validating')
+
+	def test(self):
+		import cv2
+		test_file_path = os.path.join(FLAGS.data_dir, TEST_SET_NAME)
+		test_image_filename_queue = tf.train.string_input_producer(
+			string_tensor=tf.train.match_filenames_once(test_file_path), num_epochs=1, shuffle=True)
+		ckpt_path = CHECK_POINT_PATH
+		test_images, test_labels = read_image_batch(test_image_filename_queue, TEST_BATCH_SIZE)
+		# tf.summary.scalar("loss", self.loss_mean)
+		# tf.summary.scalar('accuracy', self.accuracy)
+		# merged_summary = tf.summary.merge_all()
+		all_parameters_saver = tf.train.Saver()
+		with tf.Session() as sess:  # 开始一个会话
+			sess.run(tf.global_variables_initializer())
+			sess.run(tf.local_variables_initializer())
+			# summary_writer = tf.summary.FileWriter(FLAGS.tb_dir, sess.graph)
+			# tf.summary.FileWriter(FLAGS.model_dir, sess.graph)
+			all_parameters_saver.restore(sess=sess, save_path=ckpt_path)
+			coord = tf.train.Coordinator()
+			threads = tf.train.start_queue_runners(coord=coord)
+			sum_acc = 0.0
+			try:
+				epoch = 0
+				while not coord.should_stop():
+					# Run training steps or whatever
+					# print('epoch ' + str(epoch))
+					example, label = sess.run([test_images, test_labels])  # 在会话中取出image和label
+					# print(label)
+					image, acc = sess.run(
+						[tf.argmax(input=self.prediction, axis=3), self.accuracy],
+						feed_dict={
+							self.input_image: example, self.input_label: label,
+							self.keep_prob: 1.0, self.lamb: 0.004
+						}
+					)
+					sum_acc += acc
+					epoch += 1
+					cv2.imwrite(os.path.join(PREDICT_SAVED_DIRECTORY, '%d.jpg' % epoch), image[0] * 255)
+					if epoch % 1 == 0:
+						print('num %d accuracy: %.6f' % (epoch, acc))
+			except tf.errors.OutOfRangeError:
+				print('Done testing -- epoch limit reached \n Average accuracy: %.2f%%' % (sum_acc / TEST_SET_SIZE * 100))
+			finally:
+				# When done, ask the threads to stop.
+				coord.request_stop()
+			# coord.request_stop()
+			coord.join(threads)
+		print('Done testing')
+
+	def predict(self):
+		import cv2
+		import glob
+		import numpy as np
+		# TODO 不应该这样写，应该直接读图片预测，而不是从tfrecord读取，因为顺序变了，无法对应
+		predict_file_path = glob.glob(os.path.join(ORIGIN_PREDICT_DIRECTORY, '*.tif'))
+		print(len(predict_file_path))
+		ckpt_path = CHECK_POINT_PATH
+		all_parameters_saver = tf.train.Saver()
+		with tf.Session() as sess:  # 开始一个会话
+			sess.run(tf.global_variables_initializer())
+			sess.run(tf.local_variables_initializer())
+			# summary_writer = tf.summary.FileWriter(FLAGS.tb_dir, sess.graph)
+			# tf.summary.FileWriter(FLAGS.model_dir, sess.graph)
+			all_parameters_saver.restore(sess=sess, save_path=ckpt_path)
+			for index, image_path in enumerate(predict_file_path):
+				# image = cv2.imread(image_path, flags=0)
+				image = np.reshape(a=cv2.imread(image_path, flags=0), newshape=(1, INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL))
+				predict_image = sess.run(
+					tf.argmax(input=self.prediction, axis=3),
+					feed_dict={
+						self.input_image: image,
+						self.keep_prob: 1.0, self.lamb: 0.004
+					}
+				)
+				cv2.imwrite(os.path.join(PREDICT_SAVED_DIRECTORY, '%d.jpg' % index), predict_image[0] * 255)
+		print('Done prediction')
 
 
 def main():
 	net = Unet()
 	net.set_up_unet(TRAIN_BATCH_SIZE)
 	net.train()
-	# net.set_up_unet(DEVELOPMENT_BATCH_SIZE)
+	# net.set_up_unet(VALIDATION_BATCH_SIZE)
 	# net.validate()
+	# net.set_up_unet(TEST_BATCH_SIZE)
+	# net.test()
+	# net.set_up_unet(PREDICT_BATCH_SIZE)
+	# net.predict()
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	# 数据地址
 	parser.add_argument(
-		'--data_dir', type=str, default='../input-data/Segmentation',
+		'--data_dir', type=str, default='../data_set/my_set',
 		help='Directory for storing input data')
 
 	# 模型保存地址
 	parser.add_argument(
-		'--model_dir', type=str, default='..//data_set/saved_models',
+		'--model_dir', type=str, default='../data_set/saved_models',
 		help='output model path')
 
 	# 日志保存地址
 	parser.add_argument(
-		'--tb_dir', type=str, default='../output-data/log',
+		'--tb_dir', type=str, default='../data_set/logs',
 		help='TensorBoard log path')
 
 	FLAGS, _ = parser.parse_known_args()
