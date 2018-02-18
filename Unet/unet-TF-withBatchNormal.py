@@ -1,16 +1,16 @@
 # -*- coding:utf-8 -*-
-'''
+'''  
 #====#====#====#====
-# Project Name:     U-net
-# File Name:        unet-TF
-# Date:             2/10/18 2:33 PM
-# Using IDE:        PyCharm Community Edition
+# Project Name:     U-net 
+# File Name:        unet-TF-withBatchNormal 
+# Date:             2/17/18 8:18 PM 
+# Using IDE:        PyCharm Community Edition  
 # From HomePage:    https://github.com/DuFanXin/U-net
-# Author:           DuFanXin
-# BlogPage:         http://blog.csdn.net/qq_30239975
+# Author:           DuFanXin 
+# BlogPage:         http://blog.csdn.net/qq_30239975  
 # E-mail:           18672969179@163.com
 # Copyright (c) 2018, All Rights Reserved.
-#====#====#====#====
+#====#====#====#==== 
 '''
 import tensorflow as tf
 import argparse
@@ -33,7 +33,7 @@ PREDICT_SAVED_DIRECTORY = '../data_set/my_set/predictions'
 EPS = 10e-5
 FLAGS = None
 CLASS_NUM = 2
-CHECK_POINT_PATH = '../data_set/saved_models/train_4th/model.ckpt'
+CHECK_POINT_PATH = '../data_set/saved_models/train_5th/model.ckpt'
 
 
 def calculate_unet_input_and_output(bottom=0):
@@ -237,6 +237,7 @@ class Unet:
 		self.keep_prob = None
 		self.lamb = None
 		self.result_expand = None
+		self.is_traing = None
 		self.loss, self.loss_mean, self.loss_all, self.train_step = [None] * 4
 		self.prediction, self.correct_prediction, self.accuracy = [None] * 3
 		self.result_conv = {}
@@ -244,7 +245,7 @@ class Unet:
 		self.result_maxpool = {}
 		self.result_from_contract_layer = {}
 		self.w = {}
-		self.b = {}
+		# self.b = {}
 
 	def init_w(self, shape, name):
 		with tf.name_scope('init_w'):
@@ -258,6 +259,32 @@ class Unet:
 	def init_b(shape, name):
 		with tf.name_scope('init_b'):
 			return tf.Variable(initial_value=tf.random_normal(shape=shape, dtype=tf.float32), name=name)
+
+	@staticmethod
+	def batch_norm(x, is_training, eps=EPS, decay=0.9, affine=True, name='BatchNorm2d'):
+		from tensorflow.python.training.moving_averages import assign_moving_average
+
+		with tf.variable_scope(name):
+			params_shape = x.shape[-1:]
+			moving_mean = tf.get_variable(name='mean', shape=params_shape, initializer=tf.zeros_initializer, trainable=False)
+			moving_var = tf.get_variable(name='variance', shape=params_shape, initializer=tf.ones_initializer, trainable=False)
+
+			def mean_var_with_update():
+				mean_this_batch, variance_this_batch = tf.nn.moments(x, list(range(len(x.shape) - 1)), name='moments')
+				with tf.control_dependencies([
+					assign_moving_average(moving_mean, mean_this_batch, decay),
+					assign_moving_average(moving_var, variance_this_batch, decay)
+				]):
+					return tf.identity(mean_this_batch), tf.identity(variance_this_batch)
+
+			mean, variance = tf.cond(is_training, mean_var_with_update, lambda: (moving_mean, moving_var))
+			if affine:  # 如果要用beta和gamma进行放缩
+				beta = tf.get_variable('beta', params_shape, initializer=tf.zeros_initializer)
+				gamma = tf.get_variable('gamma', params_shape, initializer=tf.ones_initializer)
+				normed = tf.nn.batch_normalization(x, mean=mean, variance=variance, offset=beta, scale=gamma, variance_epsilon=eps)
+			else:
+				normed = tf.nn.batch_normalization(x, mean=mean, variance=variance, offset=None, scale=None,  variance_epsilon=eps)
+			return normed
 
 	@staticmethod
 	def copy_and_crop_and_merge(result_from_contract_layer, result_from_upsampling):
@@ -282,6 +309,10 @@ class Unet:
 		result_from_contract_layer_crop = result_from_contract_layer
 		return tf.concat(values=[result_from_contract_layer_crop, result_from_upsampling], axis=-1)
 
+	@staticmethod
+	def conv(w, bias,):
+		return
+
 	def set_up_unet(self, batch_size):
 		# input
 		with tf.name_scope('input'):
@@ -294,7 +325,7 @@ class Unet:
 			# 	shape=[batch_size, INPUT_IMG_WIDE, INPUT_IMG_WIDE, INPUT_IMG_CHANNEL]
 			# )
 
-			# for softmax_cross_entropy_with_logits(labels=self.input_label, logits=self.prediction, name='loss')
+			# For softmax_cross_entropy_with_logits(labels=self.input_label, logits=self.prediction, name='loss')
 			# using one-hot
 			# self.input_label = tf.placeholder(
 			# 	dtype=tf.uint8, shape=[OUTPUT_IMG_WIDE, OUTPUT_IMG_WIDE], name='input_labels'
@@ -304,31 +335,33 @@ class Unet:
 			# 	shape=[batch_size, OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT]
 			# )
 
-			# for sparse_softmax_cross_entropy_with_logits(labels=self.input_label, logits=self.prediction, name='loss')
+			# For sparse_softmax_cross_entropy_with_logits(labels=self.input_label, logits=self.prediction, name='loss')
 			# not using one-hot coding
 			self.input_label = tf.placeholder(
 				dtype=tf.int32, shape=[batch_size, OUTPUT_IMG_WIDE, OUTPUT_IMG_WIDE], name='input_labels'
 			)
 			self.keep_prob = tf.placeholder(dtype=tf.float32, name='keep_prob')
 			self.lamb = tf.placeholder(dtype=tf.float32, name='lambda')
+			self.is_traing = tf.placeholder(dtype=tf.bool, name='is_traing')
+			normed_batch = self.batch_norm(x=self.input_image, is_training=self.is_traing, name='input')
 
 		# layer 1
 		with tf.name_scope('layer_1'):
 			# conv_1
 			self.w[1] = self.init_w(shape=[3, 3, INPUT_IMG_CHANNEL, 64], name='w_1')
-			self.b[1] = self.init_b(shape=[64], name='b_1')
+			# self.b[1] = self.init_b(shape=[64], name='b_1')
 			result_conv_1 = tf.nn.conv2d(
-				input=self.input_image, filter=self.w[1],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
-			result_relu_1 = tf.nn.relu(tf.nn.bias_add(result_conv_1, self.b[1], name='add_bias'), name='relu_1')
+				input=normed_batch, filter=self.w[1], strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
+			normed_batch = self.batch_norm(x=result_conv_1, is_training=self.is_traing, name='layer_1_conv_1')
+			result_relu_1 = tf.nn.relu(normed_batch, name='relu_1')
 
 			# conv_2
 			self.w[2] = self.init_w(shape=[3, 3, 64, 64], name='w_2')
-			self.b[2] = self.init_b(shape=[64], name='b_2')
+			# self.b[2] = self.init_b(shape=[64], name='b_2')
 			result_conv_2 = tf.nn.conv2d(
-				input=result_relu_1, filter=self.w[2],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
-			result_relu_2 = tf.nn.relu(tf.nn.bias_add(result_conv_2, self.b[2], name='add_bias'), name='relu_2')
+				input=result_relu_1, filter=self.w[2], strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
+			normed_batch = self.batch_norm(x=result_conv_2, is_training=self.is_traing, name='layer_1_conv_2')
+			result_relu_2 = tf.nn.relu(features=normed_batch, name='relu_2')
 			self.result_from_contract_layer[1] = result_relu_2  # 该层结果临时保存, 供上采样使用
 
 			# maxpool
@@ -343,19 +376,19 @@ class Unet:
 		with tf.name_scope('layer_2'):
 			# conv_1
 			self.w[3] = self.init_w(shape=[3, 3, 64, 128], name='w_3')
-			self.b[3] = self.init_b(shape=[128], name='b_3')
+			# self.b[3] = self.init_b(shape=[128], name='b_3')
 			result_conv_1 = tf.nn.conv2d(
-				input=result_dropout, filter=self.w[3],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
-			result_relu_1 = tf.nn.relu(tf.nn.bias_add(result_conv_1, self.b[3], name='add_bias'), name='relu_1')
+				input=result_dropout, filter=self.w[3], strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
+			normed_batch = self.batch_norm(x=result_conv_1, is_training=self.is_traing, name='layer_2_conv_1')
+			result_relu_1 = tf.nn.relu(features=normed_batch, name='relu_1')
 
 			# conv_2
 			self.w[4] = self.init_w(shape=[3, 3, 128, 128], name='w_4')
-			self.b[4] = self.init_b(shape=[128], name='b_4')
+			# self.b[4] = self.init_b(shape=[128], name='b_4')
 			result_conv_2 = tf.nn.conv2d(
-				input=result_relu_1, filter=self.w[4],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
-			result_relu_2 = tf.nn.relu(tf.nn.bias_add(result_conv_2, self.b[4], name='add_bias'), name='relu_2')
+				input=result_relu_1, filter=self.w[4], strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
+			normed_batch = self.batch_norm(x=result_conv_2, is_training=self.is_traing, name='layer_2_conv_2')
+			result_relu_2 = tf.nn.relu(features=normed_batch, name='relu_2')
 			self.result_from_contract_layer[2] = result_relu_2  # 该层结果临时保存, 供上采样使用
 
 			# maxpool
@@ -370,19 +403,19 @@ class Unet:
 		with tf.name_scope('layer_3'):
 			# conv_1
 			self.w[5] = self.init_w(shape=[3, 3, 128, 256], name='w_5')
-			self.b[5] = self.init_b(shape=[256], name='b_5')
+			# self.b[5] = self.init_b(shape=[256], name='b_5')
 			result_conv_1 = tf.nn.conv2d(
-				input=result_dropout, filter=self.w[5],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
-			result_relu_1 = tf.nn.relu(tf.nn.bias_add(result_conv_1, self.b[5], name='add_bias'), name='relu_1')
+				input=result_dropout, filter=self.w[5], strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
+			normed_batch = self.batch_norm(x=result_conv_1, is_training=self.is_traing, name='layer_3_conv_1')
+			result_relu_1 = tf.nn.relu(features=normed_batch, name='relu_1')
 
 			# conv_2
 			self.w[6] = self.init_w(shape=[3, 3, 256, 256], name='w_6')
-			self.b[6] = self.init_b(shape=[256], name='b_6')
+			# self.b[6] = self.init_b(shape=[256], name='b_6')
 			result_conv_2 = tf.nn.conv2d(
-				input=result_relu_1, filter=self.w[6],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
-			result_relu_2 = tf.nn.relu(tf.nn.bias_add(result_conv_2, self.b[6], name='add_bias'), name='relu_2')
+				input=result_relu_1, filter=self.w[6], strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
+			normed_batch = self.batch_norm(x=result_conv_2, is_training=self.is_traing, name='layer_3_conv_2')
+			result_relu_2 = tf.nn.relu(features=normed_batch, name='relu_2')
 			self.result_from_contract_layer[3] = result_relu_2  # 该层结果临时保存, 供上采样使用
 
 			# maxpool
@@ -397,19 +430,19 @@ class Unet:
 		with tf.name_scope('layer_4'):
 			# conv_1
 			self.w[7] = self.init_w(shape=[3, 3, 256, 512], name='w_7')
-			self.b[7] = self.init_b(shape=[512], name='b_7')
+			# self.b[7] = self.init_b(shape=[512], name='b_7')
 			result_conv_1 = tf.nn.conv2d(
-				input=result_dropout, filter=self.w[7],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
-			result_relu_1 = tf.nn.relu(tf.nn.bias_add(result_conv_1, self.b[7], name='add_bias'), name='relu_1')
+				input=result_dropout, filter=self.w[7], strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
+			normed_batch = self.batch_norm(x=result_conv_1, is_training=self.is_traing, name='layer_4_conv_1')
+			result_relu_1 = tf.nn.relu(features=normed_batch, name='relu_1')
 
 			# conv_2
 			self.w[8] = self.init_w(shape=[3, 3, 512, 512], name='w_8')
-			self.b[8] = self.init_b(shape=[512], name='b_8')
+			# self.b[8] = self.init_b(shape=[512], name='b_8')
 			result_conv_2 = tf.nn.conv2d(
-				input=result_relu_1, filter=self.w[8],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
-			result_relu_2 = tf.nn.relu(tf.nn.bias_add(result_conv_2, self.b[8], name='add_bias'), name='relu_2')
+				input=result_relu_1, filter=self.w[8], strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
+			normed_batch = self.batch_norm(x=result_conv_2, is_training=self.is_traing, name='layer_4_conv_2')
+			result_relu_2 = tf.nn.relu(features=normed_batch, name='relu_2')
 			self.result_from_contract_layer[4] = result_relu_2  # 该层结果临时保存, 供上采样使用
 
 			# maxpool
@@ -424,28 +457,29 @@ class Unet:
 		with tf.name_scope('layer_5'):
 			# conv_1
 			self.w[9] = self.init_w(shape=[3, 3, 512, 1024], name='w_9')
-			self.b[9] = self.init_b(shape=[1024], name='b_9')
+			# self.b[9] = self.init_b(shape=[1024], name='b_9')
 			result_conv_1 = tf.nn.conv2d(
-				input=result_dropout, filter=self.w[9],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
-			result_relu_1 = tf.nn.relu(tf.nn.bias_add(result_conv_1, self.b[9], name='add_bias'), name='relu_1')
+				input=result_dropout, filter=self.w[9], strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
+			normed_batch = self.batch_norm(x=result_conv_1, is_training=self.is_traing, name='layer_5_conv_1')
+			result_relu_1 = tf.nn.relu(features=normed_batch, name='relu_1')
 
 			# conv_2
 			self.w[10] = self.init_w(shape=[3, 3, 1024, 1024], name='w_10')
-			self.b[10] = self.init_b(shape=[1024], name='b_10')
+			# self.b[10] = self.init_b(shape=[1024], name='b_10')
 			result_conv_2 = tf.nn.conv2d(
-				input=result_relu_1, filter=self.w[10],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
-			result_relu_2 = tf.nn.relu(tf.nn.bias_add(result_conv_2, self.b[10], name='add_bias'), name='relu_2')
+				input=result_relu_1, filter=self.w[10], strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
+			normed_batch = self.batch_norm(x=result_conv_2, is_training=self.is_traing, name='layer_5_conv_2')
+			result_relu_2 = tf.nn.relu(features=normed_batch, name='relu_2')
 
 			# up sample
 			self.w[11] = self.init_w(shape=[2, 2, 512, 1024], name='w_11')
-			self.b[11] = self.init_b(shape=[512], name='b_11')
+			# self.b[11] = self.init_b(shape=[512], name='b_11')
 			result_up = tf.nn.conv2d_transpose(
 				value=result_relu_2, filter=self.w[11],
 				output_shape=[batch_size, 64, 64, 512],
 				strides=[1, 2, 2, 1], padding='VALID', name='Up_Sample')
-			result_relu_3 = tf.nn.relu(tf.nn.bias_add(result_up, self.b[11], name='add_bias'), name='relu_3')
+			normed_batch = self.batch_norm(x=result_up, is_training=self.is_traing, name='layer_5_conv_up')
+			result_relu_3 = tf.nn.relu(features=normed_batch, name='relu_3')
 
 			# dropout
 			result_dropout = tf.nn.dropout(x=result_relu_3, keep_prob=self.keep_prob)
@@ -459,29 +493,30 @@ class Unet:
 
 			# conv_1
 			self.w[12] = self.init_w(shape=[3, 3, 1024, 512], name='w_12')
-			self.b[12] = self.init_b(shape=[512], name='b_12')
+			# self.b[12] = self.init_b(shape=[512], name='b_12')
 			result_conv_1 = tf.nn.conv2d(
-				input=result_merge, filter=self.w[12],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
-			result_relu_1 = tf.nn.relu(tf.nn.bias_add(result_conv_1, self.b[12], name='add_bias'), name='relu_1')
+				input=result_merge, filter=self.w[12], strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
+			normed_batch = self.batch_norm(x=result_conv_1, is_training=self.is_traing, name='layer_6_conv_1')
+			result_relu_1 = tf.nn.relu(features=normed_batch, name='relu_1')
 
 			# conv_2
 			self.w[13] = self.init_w(shape=[3, 3, 512, 512], name='w_10')
-			self.b[13] = self.init_b(shape=[512], name='b_10')
+			# self.b[13] = self.init_b(shape=[512], name='b_10')
 			result_conv_2 = tf.nn.conv2d(
-				input=result_relu_1, filter=self.w[13],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
-			result_relu_2 = tf.nn.relu(tf.nn.bias_add(result_conv_2, self.b[13], name='add_bias'), name='relu_2')
+				input=result_relu_1, filter=self.w[13], strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
+			normed_batch = self.batch_norm(x=result_conv_2, is_training=self.is_traing, name='layer_6_conv_2')
+			result_relu_2 = tf.nn.relu(features=normed_batch, name='relu_2')
 			# print(result_relu_2.shape[1])
 
 			# up sample
 			self.w[14] = self.init_w(shape=[2, 2, 256, 512], name='w_11')
-			self.b[14] = self.init_b(shape=[256], name='b_11')
+			# self.b[14] = self.init_b(shape=[256], name='b_11')
 			result_up = tf.nn.conv2d_transpose(
 				value=result_relu_2, filter=self.w[14],
 				output_shape=[batch_size, 128, 128, 256],
 				strides=[1, 2, 2, 1], padding='VALID', name='Up_Sample')
-			result_relu_3 = tf.nn.relu(tf.nn.bias_add(result_up, self.b[14], name='add_bias'), name='relu_3')
+			normed_batch = self.batch_norm(x=result_up, is_training=self.is_traing, name='layer_6_conv_up')
+			result_relu_3 = tf.nn.relu(features=normed_batch, name='relu_3')
 
 			# dropout
 			result_dropout = tf.nn.dropout(x=result_relu_3, keep_prob=self.keep_prob)
@@ -494,28 +529,29 @@ class Unet:
 
 			# conv_1
 			self.w[15] = self.init_w(shape=[3, 3, 512, 256], name='w_12')
-			self.b[15] = self.init_b(shape=[256], name='b_12')
+			# self.b[15] = self.init_b(shape=[256], name='b_12')
 			result_conv_1 = tf.nn.conv2d(
-				input=result_merge, filter=self.w[15],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
-			result_relu_1 = tf.nn.relu(tf.nn.bias_add(result_conv_1, self.b[15], name='add_bias'), name='relu_1')
+				input=result_merge, filter=self.w[15], strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
+			normed_batch = self.batch_norm(x=result_conv_1, is_training=self.is_traing, name='layer_7_conv_1')
+			result_relu_1 = tf.nn.relu(features=normed_batch, name='relu_1')
 
 			# conv_2
 			self.w[16] = self.init_w(shape=[3, 3, 256, 256], name='w_10')
-			self.b[16] = self.init_b(shape=[256], name='b_10')
+			# self.b[16] = self.init_b(shape=[256], name='b_10')
 			result_conv_2 = tf.nn.conv2d(
-				input=result_relu_1, filter=self.w[16],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
-			result_relu_2 = tf.nn.relu(tf.nn.bias_add(result_conv_2, self.b[16], name='add_bias'), name='relu_2')
+				input=result_relu_1, filter=self.w[16], strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
+			normed_batch = self.batch_norm(x=result_conv_2, is_training=self.is_traing, name='layer_7_conv_2')
+			result_relu_2 = tf.nn.relu(features=normed_batch, name='relu_2')
 
 			# up sample
 			self.w[17] = self.init_w(shape=[2, 2, 128, 256], name='w_11')
-			self.b[17] = self.init_b(shape=[128], name='b_11')
+			# self.b[17] = self.init_b(shape=[128], name='b_11')
 			result_up = tf.nn.conv2d_transpose(
 				value=result_relu_2, filter=self.w[17],
 				output_shape=[batch_size, 256, 256, 128],
 				strides=[1, 2, 2, 1], padding='VALID', name='Up_Sample')
-			result_relu_3 = tf.nn.relu(tf.nn.bias_add(result_up, self.b[17], name='add_bias'), name='relu_3')
+			normed_batch = self.batch_norm(x=result_up, is_training=self.is_traing, name='layer_7_up')
+			result_relu_3 = tf.nn.relu(features=normed_batch, name='relu_3')
 
 			# dropout
 			result_dropout = tf.nn.dropout(x=result_relu_3, keep_prob=self.keep_prob)
@@ -528,28 +564,29 @@ class Unet:
 
 			# conv_1
 			self.w[18] = self.init_w(shape=[3, 3, 256, 128], name='w_12')
-			self.b[18] = self.init_b(shape=[128], name='b_12')
+			# self.b[18] = self.init_b(shape=[128], name='b_12')
 			result_conv_1 = tf.nn.conv2d(
-				input=result_merge, filter=self.w[18],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
-			result_relu_1 = tf.nn.relu(tf.nn.bias_add(result_conv_1, self.b[18], name='add_bias'), name='relu_1')
+				input=result_merge, filter=self.w[18], strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
+			normed_batch = self.batch_norm(x=result_conv_1, is_training=self.is_traing, name='layer_8_conv_1')
+			result_relu_1 = tf.nn.relu(features=normed_batch, name='relu_1')
 
 			# conv_2
 			self.w[19] = self.init_w(shape=[3, 3, 128, 128], name='w_10')
-			self.b[19] = self.init_b(shape=[128], name='b_10')
+			# self.b[19] = self.init_b(shape=[128], name='b_10')
 			result_conv_2 = tf.nn.conv2d(
-				input=result_relu_1, filter=self.w[19],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
-			result_relu_2 = tf.nn.relu(tf.nn.bias_add(result_conv_2, self.b[19], name='add_bias'), name='relu_2')
+				input=result_relu_1, filter=self.w[19], strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
+			normed_batch = self.batch_norm(x=result_conv_2, is_training=self.is_traing, name='layer_8_conv_2')
+			result_relu_2 = tf.nn.relu(features=normed_batch, name='relu_2')
 
 			# up sample
 			self.w[20] = self.init_w(shape=[2, 2, 64, 128], name='w_11')
-			self.b[20] = self.init_b(shape=[64], name='b_11')
+			# self.b[20] = self.init_b(shape=[64], name='b_11')
 			result_up = tf.nn.conv2d_transpose(
 				value=result_relu_2, filter=self.w[20],
 				output_shape=[batch_size, 512, 512, 64],
 				strides=[1, 2, 2, 1], padding='VALID', name='Up_Sample')
-			result_relu_3 = tf.nn.relu(tf.nn.bias_add(result_up, self.b[20], name='add_bias'), name='relu_3')
+			normed_batch = self.batch_norm(x=result_up, is_training=self.is_traing, name='layer_8_up')
+			result_relu_3 = tf.nn.relu(features=normed_batch, name='relu_3')
 
 			# dropout
 			result_dropout = tf.nn.dropout(x=result_relu_3, keep_prob=self.keep_prob)
@@ -562,31 +599,30 @@ class Unet:
 
 			# conv_1
 			self.w[21] = self.init_w(shape=[3, 3, 128, 64], name='w_12')
-			self.b[21] = self.init_b(shape=[64], name='b_12')
+			# self.b[21] = self.init_b(shape=[64], name='b_12')
 			result_conv_1 = tf.nn.conv2d(
-				input=result_merge, filter=self.w[21],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
-			result_relu_1 = tf.nn.relu(tf.nn.bias_add(result_conv_1, self.b[21], name='add_bias'), name='relu_1')
+				input=result_merge, filter=self.w[21], strides=[1, 1, 1, 1], padding='SAME', name='conv_1')
+			normed_batch = self.batch_norm(x=result_conv_1, is_training=self.is_traing, name='layer_9_conv_1')
+			result_relu_1 = tf.nn.relu(features=normed_batch, name='relu_1')
 
 			# conv_2
 			self.w[22] = self.init_w(shape=[3, 3, 64, 64], name='w_10')
-			self.b[22] = self.init_b(shape=[64], name='b_10')
+			# self.b[22] = self.init_b(shape=[64], name='b_10')
 			result_conv_2 = tf.nn.conv2d(
-				input=result_relu_1, filter=self.w[22],
-				strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
-			result_relu_2 = tf.nn.relu(tf.nn.bias_add(result_conv_2, self.b[22], name='add_bias'), name='relu_2')
+				input=result_relu_1, filter=self.w[22], strides=[1, 1, 1, 1], padding='SAME', name='conv_2')
+			normed_batch = self.batch_norm(x=result_conv_2, is_training=self.is_traing, name='layer_9_conv_2')
+			result_relu_2 = tf.nn.relu(features=normed_batch, name='relu_2')
 
 			# convolution to [batch_size, OUTPIT_IMG_WIDE, OUTPUT_IMG_HEIGHT, CLASS_NUM]
 			self.w[23] = self.init_w(shape=[1, 1, 64, CLASS_NUM], name='w_11')
-			self.b[23] = self.init_b(shape=[CLASS_NUM], name='b_11')
+			# self.b[23] = self.init_b(shape=[CLASS_NUM], name='b_11')
 			result_conv_3 = tf.nn.conv2d(
 				input=result_relu_2, filter=self.w[23],
 				strides=[1, 1, 1, 1], padding='VALID', name='conv_3')
+			normed_batch = self.batch_norm(x=result_conv_3, is_training=self.is_traing, name='layer_9_conv_3')
 			# self.prediction = tf.nn.relu(tf.nn.bias_add(result_conv_3, self.b[23], name='add_bias'), name='relu_3')
 			# self.prediction = tf.nn.sigmoid(x=tf.nn.bias_add(result_conv_3, self.b[23], name='add_bias'), name='sigmoid_1')
-			self.prediction = tf.nn.bias_add(result_conv_3, self.b[23], name='add_bias')
-		# print(self.prediction)
-		# print(self.input_label)
+			self.prediction = normed_batch
 
 		# softmax loss
 		with tf.name_scope('softmax_loss'):
@@ -617,43 +653,6 @@ class Unet:
 			self.train_step = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(self.loss_all)
 
 	def train(self):
-		# import cv2
-		# import numpy as np
-		# ckpt_path = os.path.join(FLAGS.model_dir, "model.ckpt")
-		# all_parameters_saver = tf.train.Saver()
-		# # import numpy as np
-		# # mydata = DataProcess(INPUT_IMG_HEIGHT, INPUT_IMG_WIDE)
-		# # imgs_train, imgs_mask_train = mydata.load_my_train_data()
-		# my_set_image = cv2.imread('../data_set/train.tif', flags=0)
-		# my_set_label = cv2.imread('../data_set/label.tif', flags=0)
-		# my_set_image.astype('float32')
-		# my_set_label[my_set_label <= 128] = 0
-		# my_set_label[my_set_label > 128] = 1
-		# my_set_image = np.reshape(a=my_set_image, newshape=(1, INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL))
-		# my_set_label = np.reshape(a=my_set_label, newshape=(1, OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT))
-		# # cv2.imshow('image', my_set_image)
-		# # cv2.imshow('label', my_set_label * 100)
-		# # cv2.waitKey(0)
-		# with tf.Session() as sess:  # 开始一个会话
-		# 	sess.run(tf.global_variables_initializer())
-		# 	sess.run(tf.local_variables_initializer())
-		# 	for epoch in range(10):
-		# 		lo, acc = sess.run(
-		# 			[self.loss_mean, self.accuracy],
-		# 			feed_dict={
-		# 				self.input_image: my_set_image, self.input_label: my_set_label,
-		# 				self.keep_prob: 1.0, self.lamb: 0.004}
-		# 		)
-		# 		# print('num %d, loss: %.6f and accuracy: %.6f' % (epoch, lo, acc))
-		# 		print('num %d, loss: %.6f and accuracy: %.6f' % (epoch, lo, acc))
-		# 		sess.run(
-		# 			[self.train_step],
-		# 			feed_dict={
-		# 				self.input_image: my_set_image, self.input_label: my_set_label,
-		# 				self.keep_prob: 0.6, self.lamb: 0.004}
-		# 		)
-		# 	all_parameters_saver.save(sess=sess, save_path=ckpt_path)
-		# print("Done training")
 		train_file_path = os.path.join(FLAGS.data_dir, TRAIN_SET_NAME)
 		train_image_filename_queue = tf.train.string_input_producer(
 			string_tensor=tf.train.match_filenames_once(train_file_path), num_epochs=EPOCH_NUM, shuffle=True)
@@ -681,7 +680,7 @@ class Unet:
 						[self.loss_mean, self.accuracy, merged_summary],
 						feed_dict={
 							self.input_image: example, self.input_label: label, self.keep_prob: 1.0,
-							self.lamb: 0.004}
+							self.lamb: 0.004, self.is_traing: True}
 					)
 					summary_writer.add_summary(summary_str, epoch)
 					# print('num %d, loss: %.6f and accuracy: %.6f' % (epoch, lo, acc))
@@ -690,8 +689,8 @@ class Unet:
 					sess.run(
 						[self.train_step],
 						feed_dict={
-							self.input_image: example, self.input_label: label, self.keep_prob: 0.6,
-							self.lamb: 0.004}
+							self.input_image: example, self.input_label: label, self.keep_prob: 1.0,
+							self.lamb: 0.004, self.is_traing: True}
 					)
 					epoch += 1
 			except tf.errors.OutOfRangeError:
@@ -705,34 +704,6 @@ class Unet:
 		print("Done training")
 
 	def validate(self):
-		# import cv2
-		# import numpy as np
-		# ckpt_path = os.path.join(FLAGS.model_dir, "model.ckpt")
-		# # mydata = DataProcess(INPUT_IMG_HEIGHT, INPUT_IMG_WIDE)
-		# # imgs_train, imgs_mask_train = mydata.load_my_train_data()
-		# all_parameters_saver = tf.train.Saver()
-		# my_set_image = cv2.imread('../data_set/train.tif', flags=0)
-		# my_set_label = cv2.imread('../data_set/label.tif', flags=0)
-		# my_set_image.astype('float32')
-		# my_set_label[my_set_label <= 128] = 0
-		# my_set_label[my_set_label > 128] = 1
-		# with tf.Session() as sess:
-		# 	sess.run(tf.global_variables_initializer())
-		# 	sess.run(tf.local_variables_initializer())
-		# 	all_parameters_saver.restore(sess=sess, save_path=ckpt_path)
-		# 	image, acc = sess.run(
-		# 		fetches=[self.prediction, self.accuracy],
-		# 		feed_dict={
-		# 				self.input_image: my_set_image, self.input_label: my_set_label,
-		# 				self.keep_prob: 1.0, self.lamb: 0.004}
-		# 	)
-		# image = np.argmax(a=image[0], axis=2).astype('uint8') * 255
-		# # cv2.imshow('predict', image)
-		# # cv2.imshow('o', np.asarray(a=image[0], dtype=np.uint8) * 100)
-		# # cv2.waitKey(0)
-		# cv2.imwrite(filename=os.path.join(FLAGS.model_dir, 'predict.jpg'), img=image)
-		# print(acc)
-		# print("Done test, predict image has been saved to %s" % (os.path.join(FLAGS.model_dir, 'predict.jpg')))
 		validation_file_path = os.path.join(FLAGS.data_dir, VALIDATION_SET_NAME)
 		validation_image_filename_queue = tf.train.string_input_producer(
 			string_tensor=tf.train.match_filenames_once(validation_file_path), num_epochs=1, shuffle=True)
@@ -761,7 +732,7 @@ class Unet:
 						[self.loss_mean, self.accuracy],
 						feed_dict={
 							self.input_image: example, self.input_label: label, self.keep_prob: 1.0,
-							self.lamb: 0.004}
+							self.lamb: 0.004, self.is_traing: False}
 					)
 					# summary_writer.add_summary(summary_str, epoch)
 					# print('num %d, loss: %.6f and accuracy: %.6f' % (epoch, lo, acc))
@@ -808,7 +779,7 @@ class Unet:
 						[tf.argmax(input=self.prediction, axis=3), self.accuracy],
 						feed_dict={
 							self.input_image: example, self.input_label: label,
-							self.keep_prob: 1.0, self.lamb: 0.004
+							self.keep_prob: 1.0, self.lamb: 0.004, self.is_traing: False
 						}
 					)
 					sum_acc += acc
@@ -846,8 +817,7 @@ class Unet:
 				predict_image = sess.run(
 					tf.argmax(input=self.prediction, axis=3),
 					feed_dict={
-						self.input_image: image,
-						self.keep_prob: 1.0, self.lamb: 0.004
+						self.input_image: image, self.keep_prob: 1.0, self.lamb: 0.004, self.is_traing: False
 					}
 				)
 				cv2.imwrite(os.path.join(PREDICT_SAVED_DIRECTORY, '%d.jpg' % index), predict_image[0] * 255)

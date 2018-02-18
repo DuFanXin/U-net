@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 import glob
 from keras.preprocessing.image import img_to_array, load_img
-import os
+import tensorflow as tf
 
 
 def show_test_result():
@@ -91,7 +91,58 @@ def create_small_train_data():
 	np.save('../data_set/npydata/imgs_mask_small_train.npy', imglabels)
 	print('Saving to .npy files done.')
 
+
+def batch_norm(x, is_training, eps=1e-05, decay=0.9, affine=True, name='BatchNorm2d'):
+	from tensorflow.python.training.moving_averages import assign_moving_average
+
+	with tf.variable_scope(name):
+		print(get_scope())
+		print(tf.get_variable_scope())
+		params_shape = x.shape[-1:]
+		moving_mean = tf.get_variable(name='mean', shape=params_shape, initializer=tf.zeros_initializer, trainable=False)
+		moving_var = tf.get_variable(name='variance', shape=params_shape, initializer=tf.ones_initializer, trainable=False)
+
+		def mean_var_with_update():
+			mean, variance = tf.nn.moments(x, list(range(len(x.shape) - 1)), name='moments')
+			with tf.control_dependencies([
+				assign_moving_average(moving_mean, mean, decay),
+				assign_moving_average(moving_var, variance, decay)
+			]):
+				return tf.identity(mean), tf.identity(variance)
+		mean, variance = tf.cond(is_training, mean_var_with_update, lambda: (moving_mean, moving_var))
+		if affine:
+			beta = tf.get_variable('beta', params_shape, initializer=tf.zeros_initializer)
+			gamma = tf.get_variable('gamma', params_shape, initializer=tf.ones_initializer)
+			normed = tf.nn.batch_normalization(x, mean, variance, beta, gamma, eps)
+		else:
+			normed = tf.nn.batch_normalization(x, mean, variance, None, None, eps)
+		return normed
+
+
+def get_scope():
+	means = tf.get_variable(name='means', shape=[1], initializer=tf.zeros_initializer, trainable=False)
+	return means.name
+
 if __name__ == '__main__':
 	# create_small_train_data()
 	# load_small_train_data()
-	show_test_result()
+	# show_test_result()
+	srce = tf.Variable(tf.random_normal(shape=[1, 5, 5, 3]))
+	is_train = tf.placeholder(dtype=tf.bool, shape=[])
+	# with tf.variable_scope('0'):
+	# 	srce = tf.get_variable(name='mean', shape=[1, 5, 5, 3], initializer=tf.zeros_initializer, trainable=False)
+	norm = batch_norm(x=srce, is_training=is_train)
+	# sr = dds(x=srce, is_training=True)
+	with tf.Session() as sess:
+		sess.run(tf.global_variables_initializer())
+		sess.run(tf.local_variables_initializer())
+		print(get_scope())
+		print(sess.run(norm, feed_dict={is_train: False}).shape)
+		# print(tf.get_variable_scope())
+		# print(srce.shape[:-1])
+		# print(list(range(len(srce.shape) - 1)))
+		# axise = list(range(len(srce.shape) - 1))
+		# print(axise)
+		# batch_mean, batch_var = sess.run(tf.nn.moments(x=srce, axes=-1, name='moments'))
+		# print(batch_mean)
+		# sess.run(norm)
