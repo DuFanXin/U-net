@@ -1,5 +1,5 @@
 # -*- coding:utf-8 -*-
-'''  
+"""
 #====#====#====#====
 # Project Name:     U-net 
 # File Name:        unet-TF-withBatchNormal 
@@ -11,7 +11,7 @@
 # E-mail:           18672969179@163.com
 # Copyright (c) 2018, All Rights Reserved.
 #====#====#====#==== 
-'''
+"""
 import tensorflow as tf
 import argparse
 import os
@@ -175,7 +175,6 @@ def read_check_tfrecords():
 		sess.run(tf.local_variables_initializer())
 		coord = tf.train.Coordinator()
 		threads = tf.train.start_queue_runners(coord=coord)
-		example, label = sess.run([train_images, train_labels])
 		example, label = sess.run([train_images, train_labels])
 		cv2.imshow('image', example)
 		cv2.imshow('lael', label * 100)
@@ -800,7 +799,6 @@ class Unet:
 		import cv2
 		import glob
 		import numpy as np
-		# TODO 不应该这样写，应该直接读图片预测，而不是从tfrecord读取，因为顺序变了，无法对应
 		predict_file_path = glob.glob(os.path.join(ORIGIN_PREDICT_DIRECTORY, '*.tif'))
 		print(len(predict_file_path))
 		ckpt_path = CHECK_POINT_PATH
@@ -813,7 +811,9 @@ class Unet:
 			all_parameters_saver.restore(sess=sess, save_path=ckpt_path)
 			for index, image_path in enumerate(predict_file_path):
 				# image = cv2.imread(image_path, flags=0)
-				image = np.reshape(a=cv2.imread(image_path, flags=0), newshape=(1, INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL))
+				image = np.reshape(
+					a=cv2.imread(image_path, flags=0),
+					newshape=(1, INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL))
 				predict_image = sess.run(
 					tf.argmax(input=self.prediction, axis=3),
 					feed_dict={
