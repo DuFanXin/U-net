@@ -123,21 +123,33 @@ def get_scope():
 	means = tf.get_variable(name='means', shape=[1], initializer=tf.zeros_initializer, trainable=False)
 	return means.name
 
+
+def tif_merge():
+	import cv2
+	import numpy as np
+	img1 = cv2.imread(filename='../data_set/train/0.tif')
+	img2 = cv2.imread(filename='../data_set/train/1.tif')
+	img_mer = np.concatenate((img1, img2), axis=-1)
+	np.save(file='../data_set/train/merged.tif', arr=img_mer)
+	# cv2.imwrite(filename='../data_set/train/merged.tif', img=img_mer)
+	print(img_mer.shape)
+
 if __name__ == '__main__':
+	tif_merge()
 	# create_small_train_data()
 	# load_small_train_data()
 	# show_test_result()
-	srce = tf.Variable(tf.random_normal(shape=[1, 5, 5, 3]))
-	is_train = tf.placeholder(dtype=tf.bool, shape=[])
+	# srce = tf.Variable(tf.random_normal(shape=[1, 5, 5, 3]))
+	# is_train = tf.placeholder(dtype=tf.bool, shape=[])
 	# with tf.variable_scope('0'):
 	# 	srce = tf.get_variable(name='mean', shape=[1, 5, 5, 3], initializer=tf.zeros_initializer, trainable=False)
-	norm = batch_norm(x=srce, is_training=is_train)
+	# norm = batch_norm(x=srce, is_training=is_train)
 	# sr = dds(x=srce, is_training=True)
-	with tf.Session() as sess:
-		sess.run(tf.global_variables_initializer())
-		sess.run(tf.local_variables_initializer())
-		print(get_scope())
-		print(sess.run(norm, feed_dict={is_train: False}).shape)
+	# with tf.Session() as sess:
+	# 	sess.run(tf.global_variables_initializer())
+	# 	sess.run(tf.local_variables_initializer())
+	# 	print(get_scope())
+	# 	print(sess.run(norm, feed_dict={is_train: False}).shape)
 		# print(tf.get_variable_scope())
 		# print(srce.shape[:-1])
 		# print(list(range(len(srce.shape) - 1)))

@@ -1,5 +1,5 @@
 # -*- coding:utf-8 -*-
-'''  
+"""
 #====#====#====#====
 # Project Name:     U-net 
 # File Name:        data_TF 
@@ -11,7 +11,7 @@
 # E-mail:           18672969179@163.com
 # Copyright (c) 2018, All Rights Reserved.
 #====#====#====#==== 
-'''
+"""
 import Augmentor
 import os
 import glob
@@ -39,8 +39,6 @@ TRAIN_SET_SIZE = 2100
 VALIDATION_SET_SIZE = 27
 TEST_SET_SIZE = 30
 PREDICT_SET_SIZE = 30
-
-# TODO 加入一个合并image和label的函数
 
 
 def augment():
@@ -201,18 +199,18 @@ def write_img_to_tfrecords2():
 	aug_label_path = "../data_set/aug_label"
 	images = []
 	for indir in os.listdir(aug_merge_path):
-		trainPath = os.path.join(aug_train_path, indir)
-		labelPath = os.path.join(aug_label_path, indir)
-		print(trainPath, labelPath)
-		imgs = glob.glob(trainPath + '/*' + '.tif')
+		trainpath = os.path.join(aug_train_path, indir)
+		labelpath = os.path.join(aug_label_path, indir)
+		print(trainpath, labelpath)
+		imgs = glob.glob(trainpath + '/*' + '.tif')
 		images.extend(imgs)
 	print(len(images))
 	# for imgname in images:
 	# 	trainmidname = imgname[imgname.rindex('/') + 1:]
 	# 	labelimgname = imgname[imgname.rindex('/') + 1:imgname.rindex('_')] + '_label.tif'
 	# 	print(trainmidname, labelimgname)
-		# img = load_img(trainPath + '/' + trainmidname, grayscale=True)
-		# label = load_img(labelPath + '/' + labelimgname, grayscale=True)
+	# img = load_img(trainPath + '/' + trainmidname, grayscale=True)
+	# label = load_img(labelPath + '/' + labelimgname, grayscale=True)
 
 if __name__ == '__main__':
 	# augment()

@@ -820,16 +820,16 @@ class Unet:
 						self.input_image: image, self.keep_prob: 1.0, self.lamb: 0.004, self.is_traing: False
 					}
 				)
-				cv2.imwrite(os.path.join(PREDICT_SAVED_DIRECTORY, '%d.jpg' % index), predict_image[0] * 255)
+				cv2.imwrite(os.path.join(PREDICT_SAVED_DIRECTORY, '%d.jpg' % index), predict_image[0])  # * 255
 		print('Done prediction')
 
 
 def main():
 	net = Unet()
-	# net.set_up_unet(TRAIN_BATCH_SIZE)
-	# net.train()
-	net.set_up_unet(VALIDATION_BATCH_SIZE)
-	net.validate()
+	net.set_up_unet(TRAIN_BATCH_SIZE)
+	net.train()
+	# net.set_up_unet(VALIDATION_BATCH_SIZE)
+	# net.validate()
 	# net.set_up_unet(TEST_BATCH_SIZE)
 	# net.test()
 	# net.set_up_unet(PREDICT_BATCH_SIZE)

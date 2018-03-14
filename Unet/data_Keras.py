@@ -1,5 +1,5 @@
 # -*- coding:utf-8 -*-
-'''  
+"""
 #====#====#====#====
 # Project Name:     U-net 
 # File Name:        data_Keras
@@ -11,15 +11,37 @@
 # E-mail:           18672969179@163.com
 # Copyright (c) 2018, All Rights Reserved.
 #====#====#====#==== 
-'''
+"""
 from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array, load_img
 import numpy as np
 import os
 import glob
 import cv2
-from data_TF import TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME, PREDICT_SET_NAME, \
-	TRAIN_SET_SIZE, VALIDATION_SET_SIZE, TEST_SET_SIZE, PREDICT_SET_SIZE, \
-	ORIGIN_IMAGE_DIRECTORY, ORIGIN_LABEL_DIRECTORY, ORIGIN_PREDICT_DIRECTORY
+# import tensorflow as tf
+# from data_TF import TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME, PREDICT_SET_NAME, \
+# 	TRAIN_SET_SIZE, VALIDATION_SET_SIZE, TEST_SET_SIZE, PREDICT_SET_SIZE, \
+# 	ORIGIN_IMAGE_DIRECTORY, ORIGIN_LABEL_DIRECTORY, ORIGIN_PREDICT_DIRECTORY
+TRAIN_SET_NAME = 'train_set.tfrecords'
+VALIDATION_SET_NAME = 'validation_set.tfrecords'
+TEST_SET_NAME = 'test_set.tfrecords'
+PREDICT_SET_NAME = 'predict_set.tfrecords'
+
+ORIGIN_MERGED_SOURCE_DIRECTORY = '../data_set/my_set/merged_origin_data_set'
+ORIGIN_IMAGE_DIRECTORY = '../data_set/my_set/image'
+ORIGIN_LABEL_DIRECTORY = '../data_set/my_set/label'
+ORIGIN_PREDICT_DIRECTORY = '../data_set/test'
+# Augmentor.Pipeline的参数'output_directory'有毒，非要绝对路径，只能这样咯
+AUGMENT_OUTPUT_DIRECTORY = \
+	os.getcwd()[:os.getcwd().rindex('/')] + '/data_set/my_set/merged_augment_data_set'
+AUGMENT_IMAGE_PATH = '../data_set/augment_images'
+AUGMENT_LABEL_PATH = '../data_set/augment_labels'
+
+INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL = 512, 512, 1
+OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT, OUTPUT_IMG_CHANNEL = 512, 512, 1
+TRAIN_SET_SIZE = 2100
+VALIDATION_SET_SIZE = 27
+TEST_SET_SIZE = 30
+PREDICT_SET_SIZE = 30
 
 
 class Augmentation(object):
@@ -65,10 +87,14 @@ class Augmentation(object):
 		path_merge = self.merge_path
 		imgtype = self.img_type
 		path_aug_merge = self.aug_merge_path
-		print(len(trains), len(labels))
+		print('%d images \n%d labels' % (len(trains), len(labels)))
 		if len(trains) != len(labels) or len(trains) == 0 or len(trains) == 0:
 			print("trains can't match labels")
 			return 0
+		if not os.path.lexists(path_merge):
+			os.mkdir(path_merge)
+		if not os.path.lexists(path_aug_merge):
+			os.mkdir(path_aug_merge)
 		for i in range(len(trains)):
 			img_t = load_img(path_train + "/" + str(i) + "." + imgtype)  # 读入train
 			img_l = load_img(path_label + "/" + str(i) + "." + imgtype)  # 读入label
@@ -82,15 +108,14 @@ class Augmentation(object):
 			savedir = path_aug_merge + "/" + str(i)                      # 存储合并增强后的图像
 			if not os.path.lexists(savedir):
 				os.mkdir(savedir)
+			print("running %d doAugmenttaion" % i)
 			self.do_augmentate(img, savedir, str(i))                      # 数据增强
 
 	def do_augmentate(self, img, save_to_dir, save_prefix, batch_size=1, save_format='tif', imgnum=70):
-		print("运行 doAugmenttaion")
-
 		# augmentate one image
 		datagen = self.datagen
 		i = 0
-		for batch in datagen.flow(
+		for _ in datagen.flow(
 				img,
 				batch_size=batch_size,
 				save_to_dir=save_to_dir,
@@ -102,12 +127,18 @@ class Augmentation(object):
 
 	def split_merge(self):
 		# 读入合并增强之后的数据(aug_merge), 对其进行分离, 分别保存至 aug_train, aug_label
-		print("运行 splitMerge")
+		print("running splitMerge")
 
 		# split merged image apart
 		path_merge = self.aug_merge_path       # 合并增强之后的图像
 		path_train = self.aug_train_path       # 增强之后分离出来的train
 		path_label = self.aug_label_path       # 增强之后分离出来的label
+
+		if not os.path.lexists(path_train):
+			os.mkdir(path_train)
+		if not os.path.lexists(path_label):
+			os.mkdir(path_label)
+
 		for i in range(self.slices):
 			path = path_merge + "/" + str(i)
 			print(path)
@@ -119,11 +150,11 @@ class Augmentation(object):
 			if not os.path.lexists(savedir):
 				os.mkdir(savedir)
 			for imgname in train_imgs:         # rindex("/") 是返回'/'在字符串中最后一次出现的索引
-				midname = imgname[imgname.rindex("/") + 1:imgname.rindex("." + self.img_type)] # 获得文件名(不包含后缀)
+				midname = imgname[imgname.rindex("/") + 1:imgname.rindex("." + self.img_type)]  # 获得文件名(不包含后缀)
 				img = cv2.imread(imgname)      # 读入训练图像
 				img_train = img[:, :, 2]  # 训练集是第2个通道, label是第0个通道
 				img_label = img[:, :, 0]
-				cv2.imwrite(path_train + "/" + str(i) + "/" + midname + "_train" + "." + self.img_type, img_train) # 保存训练图像和label
+				cv2.imwrite(path_train + "/" + str(i) + "/" + midname + "_train" + "." + self.img_type, img_train)  # 保存训练图像和label
 				cv2.imwrite(path_label + "/" + str(i) + "/" + midname + "_label" + "." + self.img_type, img_label)
 
 
@@ -156,16 +187,16 @@ class DataProcess(object):
 		imgdatas = np.ndarray((count, self.out_rows, self.out_cols, 1), dtype=np.uint8)
 		imglabels = np.ndarray((count, self.out_rows, self.out_cols, 1), dtype=np.uint8)
 		for indir in os.listdir(self.aug_merge_path):
-			trainPath = os.path.join(self.aug_train_path, indir)
-			labelPath = os.path.join(self.aug_label_path, indir)
-			print(trainPath, labelPath)
-			imgs = glob.glob(trainPath + '/*' + '.tif')
+			trainpath = os.path.join(self.aug_train_path, indir)
+			labelpath = os.path.join(self.aug_label_path, indir)
+			print(trainpath, labelpath)
+			imgs = glob.glob(trainpath + '/*' + '.tif')
 			for imgname in imgs:
 				trainmidname = imgname[imgname.rindex('/') + 1:]
 				labelimgname = imgname[imgname.rindex('/') + 1:imgname.rindex('_')] + '_label.tif'
 				print(trainmidname, labelimgname)
-				img = load_img(trainPath + '/' + trainmidname, grayscale=True)
-				label = load_img(labelPath + '/' + labelimgname, grayscale=True)
+				img = load_img(trainpath + '/' + trainmidname, grayscale=True)
+				label = load_img(labelpath + '/' + labelimgname, grayscale=True)
 				img = img_to_array(img)
 				label = img_to_array(label)
 				imgdatas[i] = img
@@ -188,15 +219,15 @@ class DataProcess(object):
 		count = len(imgs)
 		imgdatas = np.ndarray((count, self.out_rows, self.out_cols, 1), dtype=np.uint8)
 		imglabels = np.ndarray((count, self.out_rows, self.out_cols, 1), dtype=np.uint8)
-		trainPath = '../data_set/aug_train/0'
-		labelPath = '../data_set/aug_label/0'
+		trainpath = '../data_set/aug_train/0'
+		labelpath = '../data_set/aug_label/0'
 		i = 0
 		for imgname in imgs:
 			trainmidname = imgname[imgname.rindex('/') + 1:]
 			labelimgname = imgname[imgname.rindex('/') + 1:imgname.rindex('_')] + '_label.tif'
 			print(trainmidname, labelimgname)
-			img = load_img(trainPath + '/' + trainmidname, grayscale=True)
-			label = load_img(labelPath + '/' + labelimgname, grayscale=True)
+			img = load_img(trainpath + '/' + trainmidname, grayscale=True)
+			label = load_img(labelpath + '/' + labelimgname, grayscale=True)
 			img = img_to_array(img)
 			label = img_to_array(label)
 			imgdatas[i] = img
@@ -317,16 +348,16 @@ class DataProcess(object):
 		import tensorflow as tf
 		from random import shuffle
 		import cv2
-		train_set_writer = tf.python_io.TFRecordWriter(os.path.join('../data_set/my_set', TRAIN_SET_NAME))  # 要生成的文件
-		validation_set_writer = tf.python_io.TFRecordWriter(os.path.join('../data_set/my_set', VALIDATION_SET_NAME))
-		test_set_writer = tf.python_io.TFRecordWriter(os.path.join('../data_set/my_set', TEST_SET_NAME))  # 要生成的文件
-		# predict_set_writer = tf.python_io.TFRecordWriter(os.path.join('../data_set/my_set', PREDICT_SET_NAME))  # 要生成的文件
+		train_set_writer = tf.python_io.TFRecordWriter(os.path.join('../data_set', TRAIN_SET_NAME))  # 要生成的文件
+		validation_set_writer = tf.python_io.TFRecordWriter(os.path.join('../data_set', VALIDATION_SET_NAME))
+		test_set_writer = tf.python_io.TFRecordWriter(os.path.join('../data_set', TEST_SET_NAME))  # 要生成的文件
 
+		# add all files
 		merged_images_path = []
 		for indir in os.listdir(self.aug_merge_path):
-			# trainPath = os.path.join(self.aug_train_path, indir)
-			# labelPath = os.path.join(self.aug_label_path, indir)
-			# print(trainPath, labelPath)
+			# trainpath = os.path.join(self.aug_train_path, indir)
+			# labelpath = os.path.join(self.aug_label_path, indir)
+			# print(trainpath, labelpath)
 			imgs = glob.glob(os.path.join(self.aug_merge_path, indir) + '/*' + '.tif')
 			# print(imgs[0])
 			merged_images_path.extend(glob.glob(os.path.join(self.aug_merge_path, indir) + '/*' + '.tif'))
@@ -357,7 +388,7 @@ class DataProcess(object):
 		print("Done whole train_set writing")
 
 		# validation set
-		for index, merged_image_path in enumerate(merged_images_path[TRAIN_SET_SIZE:]):
+		for index, merged_image_path in enumerate(merged_images_path[TRAIN_SET_SIZE:TRAIN_SET_SIZE + VALIDATION_SET_SIZE]):
 			validation_image_path = merged_image_path.replace('merge', 'train')
 			validation_image_path = validation_image_path[:validation_image_path.rindex('.tif')] + '_train.tif'
 			label_image_path = merged_image_path.replace('merge', 'label')
@@ -403,38 +434,38 @@ class DataProcess(object):
 			}))  # example对象对label和image数据进行封装
 			test_set_writer.write(example.SerializeToString())  # 序列化为字符串
 			if index % 10 == 0:
-				print('Done test_set writing %.2f%%' % (index / PREDICT_SET_SIZE * 100))
+				print('Done test_set writing %.2f%%' % (index / TEST_SET_SIZE * 100))
 		test_set_writer.close()
-		print("Done test_set writing")
+		print("Done whole test_set writing")
 
 		# predict set
-		for index in range(PREDICT_SET_SIZE):
-			origin_image_path = ORIGIN_IMAGE_DIRECTORY
-			origin_label_path = ORIGIN_LABEL_DIRECTORY
-			predict_image = cv2.imread(os.path.join(origin_image_path, '%d.tif' % index), flags=0)
-			predict_label = cv2.imread(os.path.join(origin_label_path, '%d.tif' % index), flags=0)
-			# predict_image = cv2.resize(src=predict_image, dsize=(INPUT_IMG_WIDE, INPUT_IMG_HEIGHT))
-			# predict_image = np.asarray(a=predict_image, dtype=np.uint8)
-			# predict_image = cv2.resize(src=predict_image, dsize=(INPUT_IMG_WIDE, INPUT_IMG_HEIGHT))
-			# predict_label = np.asarray(a=predict_label, dtype=np.uint8)
-			# predict_label = cv2.resize(src=predict_label, dsize=(OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT))
-			predict_label[predict_label <= 100] = 0
-			predict_label[predict_label > 100] = 1
-			# predict_image = io.imread(file_path)
-			# predict_image = transform.resize(predict_image, (INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL))
-			# sample_image = predict_image[:, :, 0]
-			# label_image = predict_image[:, :, 2]
-			# label_image[label_image < 100] = 0
-			# label_image[label_image > 100] = 10
-			example = tf.train.Example(features=tf.train.Features(feature={
-				'label': tf.train.Feature(bytes_list=tf.train.BytesList(value=[predict_label.tobytes()])),
-				'image_raw': tf.train.Feature(bytes_list=tf.train.BytesList(value=[predict_image.tobytes()]))
-			}))  # example对象对label和image数据进行封装
-			# predict_set_writer.write(example.SerializeToString())  # 序列化为字符串
-			if index % 10 == 0:
-				print('Done predict_set writing %.2f%%' % (index / PREDICT_SET_SIZE * 100))
-		# predict_set_writer.close()
-		print("Done predict_set writing")
+		# for index in range(PREDICT_SET_SIZE):
+		# 	origin_image_path = ORIGIN_IMAGE_DIRECTORY
+		# 	origin_label_path = ORIGIN_LABEL_DIRECTORY
+		# 	predict_image = cv2.imread(os.path.join(origin_image_path, '%d.tif' % index), flags=0)
+		# 	predict_label = cv2.imread(os.path.join(origin_label_path, '%d.tif' % index), flags=0)
+		# 	# predict_image = cv2.resize(src=predict_image, dsize=(INPUT_IMG_WIDE, INPUT_IMG_HEIGHT))
+		# 	# predict_image = np.asarray(a=predict_image, dtype=np.uint8)
+		# 	# predict_image = cv2.resize(src=predict_image, dsize=(INPUT_IMG_WIDE, INPUT_IMG_HEIGHT))
+		# 	# predict_label = np.asarray(a=predict_label, dtype=np.uint8)
+		# 	# predict_label = cv2.resize(src=predict_label, dsize=(OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT))
+		# 	predict_label[predict_label <= 100] = 0
+		# 	predict_label[predict_label > 100] = 1
+		# 	# predict_image = io.imread(file_path)
+		# 	# predict_image = transform.resize(predict_image, (INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL))
+		# 	# sample_image = predict_image[:, :, 0]
+		# 	# label_image = predict_image[:, :, 2]
+		# 	# label_image[label_image < 100] = 0
+		# 	# label_image[label_image > 100] = 10
+		# 	example = tf.train.Example(features=tf.train.Features(feature={
+		# 		'label': tf.train.Feature(bytes_list=tf.train.BytesList(value=[predict_label.tobytes()])),
+		# 		'image_raw': tf.train.Feature(bytes_list=tf.train.BytesList(value=[predict_image.tobytes()]))
+		# 	}))  # example对象对label和image数据进行封装
+		# 	# predict_set_writer.write(example.SerializeToString())  # 序列化为字符串
+		# 	if index % 10 == 0:
+		# 		print('Done predict_set writing %.2f%%' % (index / PREDICT_SET_SIZE * 100))
+		# # predict_set_writer.close()
+		# print("Done predict_set writing")
 
 
 if __name__ == '__main__':
