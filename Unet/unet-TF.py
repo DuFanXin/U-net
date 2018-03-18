@@ -15,25 +15,30 @@
 import tensorflow as tf
 import argparse
 import os
-from data_TF import TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME, PREDICT_SET_NAME, \
-	INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL, \
-	OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT, TEST_SET_SIZE, ORIGIN_PREDICT_DIRECTORY, PREDICT_SET_SIZE
-# from Unet.data_Keras import DataProcess
-# import keras
-# TRAIN_SET_NAME = 'train_set.tfrecords'
-# VALIDATION_SET_NAME = 'validation_set.tfrecords'
-# INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL = 512, 512, 1
-# OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT, OUTPUT_IMG_CHANNEL = 512, 512, 1
+
+
+TRAIN_SET_NAME = 'train_set.tfrecords'
+VALIDATION_SET_NAME = 'validation_set.tfrecords'
+TEST_SET_NAME = 'test_set.tfrecords'
+
+ORIGIN_PREDICT_DIRECTORY = '../data_set/test'
+
+INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL = 512, 512, 1
+OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT, OUTPUT_IMG_CHANNEL = 512, 512, 1
+TRAIN_SET_SIZE = 8
+VALIDATION_SET_SIZE = 27
+TEST_SET_SIZE = 30
+PREDICT_SET_SIZE = 30
 EPOCH_NUM = 1
 TRAIN_BATCH_SIZE = 1
 VALIDATION_BATCH_SIZE = 1
 TEST_BATCH_SIZE = 1
 PREDICT_BATCH_SIZE = 1
-PREDICT_SAVED_DIRECTORY = '../data_set/my_set/predictions'
+PREDICT_SAVED_DIRECTORY = '../data_set/predictions'
 EPS = 10e-5
 FLAGS = None
 CLASS_NUM = 2
-CHECK_POINT_PATH = '../data_set/saved_models/train_4th/model.ckpt'
+CHECK_POINT_PATH = None
 
 
 def calculate_unet_input_and_output(bottom=0):
@@ -657,7 +662,7 @@ class Unet:
 		train_file_path = os.path.join(FLAGS.data_dir, TRAIN_SET_NAME)
 		train_image_filename_queue = tf.train.string_input_producer(
 			string_tensor=tf.train.match_filenames_once(train_file_path), num_epochs=EPOCH_NUM, shuffle=True)
-		ckpt_path = os.path.join(FLAGS.model_dir, "model.ckpt")
+		ckpt_path = CHECK_POINT_PATH
 		train_images, train_labels = read_image_batch(train_image_filename_queue, TRAIN_BATCH_SIZE)
 		tf.summary.scalar("loss", self.loss_mean)
 		tf.summary.scalar('accuracy', self.accuracy)
@@ -832,6 +837,8 @@ class Unet:
 		# TODO 不应该这样写，应该直接读图片预测，而不是从tfrecord读取，因为顺序变了，无法对应
 		predict_file_path = glob.glob(os.path.join(ORIGIN_PREDICT_DIRECTORY, '*.tif'))
 		print(len(predict_file_path))
+		if not os.path.lexists(PREDICT_SAVED_DIRECTORY):
+			os.mkdir(PREDICT_SAVED_DIRECTORY)
 		ckpt_path = CHECK_POINT_PATH
 		all_parameters_saver = tf.train.Saver()
 		with tf.Session() as sess:  # 开始一个会话
@@ -856,12 +863,13 @@ class Unet:
 
 def main():
 	net = Unet()
-	# net.set_up_unet(TRAIN_BATCH_SIZE)
-	# net.train()
+	CHECK_POINT_PATH = os.path.join(FLAGS.model_dir, "model.ckpt")
+	net.set_up_unet(TRAIN_BATCH_SIZE)
+	net.train()
 	# net.set_up_unet(VALIDATION_BATCH_SIZE)
 	# net.validate()
-	net.set_up_unet(TEST_BATCH_SIZE)
-	net.test()
+	# net.set_up_unet(TEST_BATCH_SIZE)
+	# net.test()
 	# net.set_up_unet(PREDICT_BATCH_SIZE)
 	# net.predict()
 
@@ -869,7 +877,7 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	# 数据地址
 	parser.add_argument(
-		'--data_dir', type=str, default='../data_set/my_set',
+		'--data_dir', type=str, default='../data_set/',
 		help='Directory for storing input data')
 
 	# 模型保存地址

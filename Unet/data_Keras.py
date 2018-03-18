@@ -26,10 +26,10 @@ VALIDATION_SET_NAME = 'validation_set.tfrecords'
 TEST_SET_NAME = 'test_set.tfrecords'
 PREDICT_SET_NAME = 'predict_set.tfrecords'
 
-ORIGIN_MERGED_SOURCE_DIRECTORY = '../data_set/my_set/merged_origin_data_set'
+# ORIGIN_MERGED_SOURCE_DIRECTORY = '../data_set/my_set/merged_origin_data_set'
 ORIGIN_IMAGE_DIRECTORY = '../data_set/my_set/image'
 ORIGIN_LABEL_DIRECTORY = '../data_set/my_set/label'
-ORIGIN_PREDICT_DIRECTORY = '../data_set/test'
+# ORIGIN_PREDICT_DIRECTORY = '../data_set/test'
 # Augmentor.Pipeline的参数'output_directory'有毒，非要绝对路径，只能这样咯
 AUGMENT_OUTPUT_DIRECTORY = \
 	os.getcwd()[:os.getcwd().rindex('/')] + '/data_set/my_set/merged_augment_data_set'

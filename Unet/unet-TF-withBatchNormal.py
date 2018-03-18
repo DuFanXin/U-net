@@ -15,21 +15,21 @@
 import tensorflow as tf
 import argparse
 import os
-from data_TF import TRAIN_SET_NAME, VALIDATION_SET_NAME, TEST_SET_NAME, PREDICT_SET_NAME, \
-	INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL, \
-	OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT, TEST_SET_SIZE, ORIGIN_PREDICT_DIRECTORY, PREDICT_SET_SIZE
-# from Unet.data_Keras import DataProcess
-# import keras
-# TRAIN_SET_NAME = 'train_set.tfrecords'
-# VALIDATION_SET_NAME = 'validation_set.tfrecords'
-# INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL = 512, 512, 1
-# OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT, OUTPUT_IMG_CHANNEL = 512, 512, 1
+
+TRAIN_SET_NAME = 'train_set.tfrecords'
+VALIDATION_SET_NAME = 'validation_set.tfrecords'
+TEST_SET_NAME = 'test_set.tfrecords'
+ORIGIN_PREDICT_DIRECTORY = '../data_set/test'
+INPUT_IMG_WIDE, INPUT_IMG_HEIGHT, INPUT_IMG_CHANNEL = 512, 512, 1
+OUTPUT_IMG_WIDE, OUTPUT_IMG_HEIGHT, OUTPUT_IMG_CHANNEL = 512, 512, 1
+TRAIN_SET_SIZE = 8
 EPOCH_NUM = 1
 TRAIN_BATCH_SIZE = 1
 VALIDATION_BATCH_SIZE = 1
+TEST_SET_SIZE = 30
 TEST_BATCH_SIZE = 1
 PREDICT_BATCH_SIZE = 1
-PREDICT_SAVED_DIRECTORY = '../data_set/my_set/predictions'
+PREDICT_SAVED_DIRECTORY = '../data_set/predictions'
 EPS = 10e-5
 FLAGS = None
 CLASS_NUM = 2
@@ -801,7 +801,9 @@ class Unet:
 		import numpy as np
 		predict_file_path = glob.glob(os.path.join(ORIGIN_PREDICT_DIRECTORY, '*.tif'))
 		print(len(predict_file_path))
-		ckpt_path = CHECK_POINT_PATH
+		if not os.path.lexists(PREDICT_SAVED_DIRECTORY):
+			os.mkdir(PREDICT_SAVED_DIRECTORY)
+		ckpt_path = os.path.join(FLAGS.model_dir, "model.ckpt") # CHECK_POINT_PATH
 		all_parameters_saver = tf.train.Saver()
 		with tf.Session() as sess:  # 开始一个会话
 			sess.run(tf.global_variables_initializer())
@@ -826,14 +828,15 @@ class Unet:
 
 def main():
 	net = Unet()
-	net.set_up_unet(TRAIN_BATCH_SIZE)
-	net.train()
+	CHECK_POINT_PATH = os.path.join(FLAGS.model_dir, "model.ckpt")
+	# net.set_up_unet(TRAIN_BATCH_SIZE)
+	# net.train()
 	# net.set_up_unet(VALIDATION_BATCH_SIZE)
 	# net.validate()
 	# net.set_up_unet(TEST_BATCH_SIZE)
 	# net.test()
-	# net.set_up_unet(PREDICT_BATCH_SIZE)
-	# net.predict()
+	net.set_up_unet(PREDICT_BATCH_SIZE)
+	net.predict()
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
